@@ -22,6 +22,7 @@ func SlackPayloadBuilder(rcVersion string,prList []map[string]interface{} ) (sla
 
 	// Constructing the Slack message payload
 	payload := map[string]interface{}{
+		"text": fmt.Sprintf("🚀 Release Candidate Branches for %s", rcVersion),
 		"blocks": []interface{}{
 			map[string]interface{}{
 				"type": "header",
