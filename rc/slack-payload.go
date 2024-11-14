@@ -13,7 +13,7 @@ func SlackPayloadBuilder(rcVersion string,prList []map[string]interface{} ) (sla
 	for _, pr := range prList {
 
 		if pr["url"] != "" {
-		prDetails.WriteString(fmt.Sprintf("• *%s:* <%s|PR Link> - %s\n", pr["repo"], pr["url"], pr["error"]))
+		prDetails.WriteString(fmt.Sprintf("• *%s:* <%s|PR Link>  %s\n", pr["repo"], pr["url"], pr["error"]))
 	
 		} else {
 			prDetails.WriteString(fmt.Sprintf("• *%s:* %s\n", pr["repo"], pr["error"]))
