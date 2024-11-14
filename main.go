@@ -78,6 +78,6 @@ func main() {
 	}
 
 	log.Printf("PRs created successfully: %v", prList)
-	fmt.Printf("::set-env name=MY_ENVVAR::%v", prList)
+	fmt.Printf("::set-env name=PR_URLS::%v", prList)
 
 }
