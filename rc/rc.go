@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	infoLogger  = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime)
-	errorLogger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime)
+	infoLogger  = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLogger = log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 func CreateRcBranch(ctx context.Context, client *github.Client, owner, repo, branch, rcVersion string) error {
@@ -59,7 +59,7 @@ func MergeRcBranch(ctx context.Context, client *github.Client, owner, repo, bran
 	return nil
 }
 
-func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo, branch, rcVersion, prTitle, prBody string) (prUrl string, err error) {
+func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo, branch, rcVersion, prTitle, prBody string) (prUrl string, prError string, err error) {
 	rcBranch := fmt.Sprintf("rc/%s", rcVersion)
 	pr, res, err := client.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: github.String(prTitle),
@@ -67,14 +67,13 @@ func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo
 		Base:  github.String(branch),
 		Body:  github.String(prBody),
 	})
-	var prError string
 	if err != nil {
 		if res != nil && res.StatusCode == 422 {
 			body, _ := io.ReadAll(res.Body)
 			var responseBody map[string]interface{}
 			if err := json.Unmarshal(body, &responseBody); err != nil {
 				errorLogger.Printf("Error unmarshalling response body: %v", err)
-				return "", fmt.Errorf("error unmarshalling response body: %v", err)
+				return "", "", fmt.Errorf("error unmarshalling response body: %v", err)
 			}
 			if errors, ok := responseBody["errors"].([]interface{}); ok && len(errors) > 0 {
 				if message, ok := errors[0].(map[string]interface{})["message"].(string); ok {
@@ -88,7 +87,7 @@ func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo
 			}
 		} else {
 			errorLogger.Printf("Error creating PR: %v", err)
-			return "", fmt.Errorf("error %s creating PR: %v", res.Status, err)
+			return "", "", fmt.Errorf("error %s creating PR: %v", res.Status, err)
 		}
 	} else {
 		infoLogger.Printf("Created PR for branch %s on Repo %s", rcBranch, repo)
@@ -101,14 +100,13 @@ func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo
 		})
 		if err != nil {
 			errorLogger.Printf("Error getting PR: %v", err)
-			return "", fmt.Errorf("error getting PR: %v", err)
+			return "", "", fmt.Errorf("error getting PR: %v", err)
 		}
 		if len(prs) > 0 {
 			prUrl = prs[0].GetHTMLURL()
 		}
 	}
-	fmtPrUrl := fmt.Sprintf("%s: %s  --> %s ", repo, prUrl, prError)
-	return fmtPrUrl, nil
+	return prUrl, prError, nil
 }
 
 func RcValidate(rcVersion string) error {

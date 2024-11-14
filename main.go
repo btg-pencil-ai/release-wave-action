@@ -2,18 +2,18 @@ package main
 
 import (
 	"context"
-	"strings"
+	"fmt"
 	"log"
+	"strings"
 
 	"github.com/google/go-github/v66/github"
+	"github.com/sethvargo/go-githubactions"
 
 	"net/http"
 	"release-candidate/rc"
 	"strconv"
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
-
-	"github.com/sethvargo/go-githubactions"
 )
 
 func main() {
@@ -62,7 +62,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}
-	var prList []string
+	var prList []map[string]interface{}
+	var prUrls []string
 	for _, repo := range repoList {
 		err := rc.CreateRcBranch(ctx, client, owner, repo, productionBranch, rcVersion)
 		if err != nil {
@@ -72,14 +73,27 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error merging branch: %v", err)
 		}
-		prUrl, err := rc.CreateRcPullRequest(ctx, client, owner, repo, productionBranch, rcVersion, prTitle, prBody)
+		prUrl, prError, err := rc.CreateRcPullRequest(ctx, client, owner, repo, productionBranch, rcVersion, prTitle, prBody)
 		if err != nil {
 			log.Fatalf("Error creating PR: %v", err)
 		}
-		prList = append(prList, prUrl)
+
+		prMap := map[string]interface{}{
+			"repo":  repo,
+			"url":   prUrl,
+			"error": prError,
+		}
+		prList = append(prList, prMap)
+		prDetails := fmt.Sprintf("%s:%s:%s\n", repo, prUrl, prError)
+		prUrls = append(prUrls, prDetails)
 	}
-	prUrls := strings.Join(prList, "\n")
-	log.Printf("PR URLs:\n%v", prUrls)
-	githubactions.SetOutput("pr_urls", prUrls)
+
+	slackPayload, err := rc.SlackPayloadBuilder(rcVersion, prList)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	log.Printf("Pr details:\n%v", strings.Join(prUrls, "\n"))
+	githubactions.SetOutput("pr_urls", strings.Join(prUrls, "\n"))
+	githubactions.SetOutput("slack_payload", slackPayload)
 
 }
