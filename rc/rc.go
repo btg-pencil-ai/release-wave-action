@@ -2,7 +2,9 @@ package rc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"regexp"
@@ -65,17 +67,33 @@ func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo
 		Base:  github.String(branch),
 		Body:  github.String(prBody),
 	})
+	var prError string
 	if err != nil {
 		if res != nil && res.StatusCode == 422 {
-			infoLogger.Printf("PR already exists for branch %s for repo %s", rcBranch, repo)
+			body, _ := io.ReadAll(res.Body)
+			var responseBody map[string]interface{}
+			if err := json.Unmarshal(body, &responseBody); err != nil {
+				errorLogger.Printf("Error unmarshalling response body: %v", err)
+				return "", fmt.Errorf("error unmarshalling response body: %v", err)
+			}
+			if errors, ok := responseBody["errors"].([]interface{}); ok && len(errors) > 0 {
+				if message, ok := errors[0].(map[string]interface{})["message"].(string); ok {
+					errorLogger.Printf("Response message: %s", message)
+					prError = message
+				} else {
+					errorLogger.Printf("Response body: %s", body)
+				}
+			} else {
+				errorLogger.Printf("Response body: %s", body)
+			}
 		} else {
 			errorLogger.Printf("Error creating PR: %v", err)
 			return "", fmt.Errorf("error %s creating PR: %v", res.Status, err)
 		}
-	}else {
+	} else {
 		infoLogger.Printf("Created PR for branch %s on Repo %s", rcBranch, repo)
 	}
-	
+
 	prUrl = pr.GetHTMLURL()
 	if pr.GetHTMLURL() == "" {
 		prs, _, err := client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
@@ -89,7 +107,7 @@ func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo
 			prUrl = prs[0].GetHTMLURL()
 		}
 	}
-	fmtPrUrl := fmt.Sprintf("%s: %s", repo, prUrl)
+	fmtPrUrl := fmt.Sprintf("%s: %s  --> %s ", repo, prUrl, prError)
 	return fmtPrUrl, nil
 }
 
