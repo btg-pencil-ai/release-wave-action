@@ -1,0 +1,44 @@
+name: Release Candidate
+description: 'Create a release candidate branch and pull request'
+
+inputs:
+  rc_version:
+    description: 'The version number of the release candidate'
+    required: true
+    default: '1.0.0-rc'
+  owner:
+    description: 'The owner of the repository'
+    required: true
+    default: 'owner'
+  development_branch:
+    description: 'The development branch'
+    required: true
+    default: 'development'
+  production_branch:
+    description: 'The default branch'
+    required: true
+    default: 'main'
+  pr_title:
+    description: 'The title of the pull request'
+    required: true
+    default: 'Release Candidate'
+  pr_body:
+    description: 'The body of the pull request'
+    required: true
+    default: 'This is a release candidate'
+  github_token:
+    description: 'The GitHub token'
+    required: false
+  app_id:
+    description: 'The GitHub App ID'
+    required: false
+  private_key:
+    description: 'The GitHub App private key'
+    required: false
+  installation_id:
+    description: 'The GitHub App installation ID'
+    required: false
+
+runs:
+  using: docker
+  image: Dockerfile
