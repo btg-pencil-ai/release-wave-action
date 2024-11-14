@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"strings"
 	"log"
 
 	"github.com/google/go-github/v66/github"
@@ -12,6 +12,8 @@ import (
 	"strconv"
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
+
+	"github.com/sethvargo/go-githubactions"
 )
 
 func main() {
@@ -76,8 +78,8 @@ func main() {
 		}
 		prList = append(prList, prUrl)
 	}
-
-	log.Printf("PRs created successfully: %v", prList)
-	fmt.Printf("::set-env name=PR_URLS::%v", prList)
+	prUrls := strings.Join(prList, "\n")
+	log.Printf("PR URLs:\n%v", prUrls)
+	githubactions.SetOutput("pr_urls", prUrls)
 
 }

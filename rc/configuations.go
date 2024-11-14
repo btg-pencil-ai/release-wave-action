@@ -54,7 +54,6 @@ func Variables() Config {
 	if prBody == "" {
 		githubactions.Fatalf("pr_body is required")
 	}
-
 	return Config{
 		Owner:            owner,
 		Token:            token,
