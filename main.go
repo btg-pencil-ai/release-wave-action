@@ -33,6 +33,9 @@ func main() {
 	prBody := variables.PRBody
 
 	var client *github.Client
+	fmt.Println("AppID: ", appID)
+	fmt.Println("PrivateKey: ", privateKey)
+	fmt.Println("InstallationID: ", installationID)
 	if appID != "" && privateKey != "" && installationID != "" {
 		appIDInt, err := strconv.ParseInt(appID, 10, 64)
 		if err != nil {
