@@ -74,6 +74,7 @@ func Variables() Config {
 		Token:             token,
 		AppID:             appID,
 		PrivateKey:        privateKey,
+		InstallationID:    installationId,
 		RCVersion:         rcVersion,
 		ProductionBranch:  productionBranch,
 		DevelopmentBranch: developmentBranch,

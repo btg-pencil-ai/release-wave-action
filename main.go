@@ -33,10 +33,8 @@ func main() {
 	prBody := variables.PRBody
 
 	var client *github.Client
-	fmt.Println("AppID: ", appID)
-	fmt.Println("PrivateKey: ", privateKey)
-	fmt.Println("InstallationID: ", installationID)
 	if appID != "" && privateKey != "" && installationID != "" {
+		log.Println("Using GitHub App authentication")
 		appIDInt, err := strconv.ParseInt(appID, 10, 64)
 		if err != nil {
 			log.Fatalf("Error converting appID: %v", err)
@@ -51,6 +49,7 @@ func main() {
 		}
 		client = github.NewClient(&http.Client{Transport: itr})
 	} else if token != "" {
+		log.Println("Using personal access token authentication")
 		client = github.NewClient(nil).WithAuthToken(token)
 	} else {
 		log.Fatalf("Error: No authentication method provided")
