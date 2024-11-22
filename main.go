@@ -43,7 +43,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error converting installationID: %v", err)
 		}
-		itr, err := ghinstallation.NewKeyFromFile(http.DefaultTransport, appIDInt, installationIDInt, privateKey)
+		itr, err := ghinstallation.New(http.DefaultTransport, appIDInt, installationIDInt, []byte(privateKey))
 		if err != nil {
 			log.Fatalf("Error: %v", err)
 		}
