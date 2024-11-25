@@ -38,6 +38,9 @@ inputs:
   installation_id:
     description: 'The GitHub App installation ID'
     required: false
+  exclude_repositories:
+    description: 'A list of repositories to exclude'
+    required: false
 
 runs:
   using: docker

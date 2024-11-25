@@ -31,6 +31,7 @@ func main() {
 	developmentBranch := variables.DevelopmentBranch
 	prTitle := variables.PRTitle
 	prBody := variables.PRBody
+	excludeRepos := variables.ExcludeRepositories
 
 	var client *github.Client
 	if appID != "" && privateKey != "" && installationID != "" {
@@ -55,7 +56,7 @@ func main() {
 		log.Fatalf("Error: No authentication method provided")
 	}
 
-	repoList, err := rc.ListRepositories(ctx, client, owner)
+	repoList, err := rc.ListRepositories(ctx, client, owner, excludeRepos)
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}

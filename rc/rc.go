@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/google/go-github/v66/github"
 )
@@ -123,15 +124,17 @@ func RcValidate(rcVersion string) error {
 	return nil
 }
 
-func ListRepositories(ctx context.Context, client *github.Client, owner string) ([]string, error) {
+func ListRepositories(ctx context.Context, client *github.Client, owner string ,excludeRepos string) ([]string, error) {
 	repos, _, err := client.Repositories.ListByOrg(ctx, owner, nil)
 	if err != nil {
 		errorLogger.Printf("Error listing repositories: %v", err)
 		return nil, fmt.Errorf("error listing repositories: %v", err)
 	}
 	var repoNames []string
-	for _, r := range repos {
-		repoNames = append(repoNames, r.GetName())
+	for _, repo := range repos {
+		if !strings.Contains(excludeRepos, repo.GetName()) {
+			repoNames = append(repoNames, repo.GetName())
+		}
 	}
 
 	infoLogger.Printf("Repositories: %v", repoNames)

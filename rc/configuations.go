@@ -5,16 +5,17 @@ import (
 )
 
 type Config struct {
-	Owner             string
-	Token             string
-	AppID             string
-	InstallationID    string
-	PrivateKey        string
-	RCVersion         string
-	ProductionBranch  string
-	DevelopmentBranch string
-	PRTitle           string
-	PRBody            string
+	Owner               string
+	Token               string
+	AppID               string
+	InstallationID      string
+	PrivateKey          string
+	RCVersion           string
+	ProductionBranch    string
+	DevelopmentBranch   string
+	PRTitle             string
+	PRBody              string
+	ExcludeRepositories string
 }
 
 func Variables() Config {
@@ -69,16 +70,20 @@ func Variables() Config {
 	if prBody == "" {
 		githubactions.Fatalf("pr_body is required")
 	}
+
+	excludeRepositories := githubactions.GetInput("exclude_repositories")
+
 	return Config{
-		Owner:             owner,
-		Token:             token,
-		AppID:             appID,
-		PrivateKey:        privateKey,
-		InstallationID:    installationId,
-		RCVersion:         rcVersion,
-		ProductionBranch:  productionBranch,
-		DevelopmentBranch: developmentBranch,
-		PRTitle:           prTitle,
-		PRBody:            prBody,
+		Owner:               owner,
+		Token:               token,
+		AppID:               appID,
+		PrivateKey:          privateKey,
+		InstallationID:      installationId,
+		RCVersion:           rcVersion,
+		ProductionBranch:    productionBranch,
+		DevelopmentBranch:   developmentBranch,
+		PRTitle:             prTitle,
+		PRBody:              prBody,
+		ExcludeRepositories: excludeRepositories,
 	}
 }
