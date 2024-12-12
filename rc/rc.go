@@ -44,28 +44,39 @@ func CreateRcBranch(ctx context.Context, client *github.Client, owner, repo, bra
 	return nil
 }
 
-func MergeRcBranch(ctx context.Context, client *github.Client, owner, repo, branch, rcVersion string) error {
+func MergeRcBranch(ctx context.Context, client *github.Client, owner, repo, branch, rcVersion string) (conflictMergePr string , err error ){
 	rcBranch := fmt.Sprintf("rc/%s", rcVersion)
-	merge, _, err := client.Repositories.Merge(ctx, owner, repo, &github.RepositoryMergeRequest{
+	merge, res, err := client.Repositories.Merge(ctx, owner, repo, &github.RepositoryMergeRequest{
 		Base:          github.String(rcBranch),
 		Head:          github.String(branch),
 		CommitMessage: github.String(fmt.Sprintf("Merge branch '%s' into '%s' on %s", rcBranch, branch, repo)),
 	})
 	if err != nil {
-		errorLogger.Printf("Error merging branch: %v", err)
-		return fmt.Errorf("error merging branch: %v", err)
+		if res != nil && res.StatusCode == 409 {
+			errorLogger.Printf("Error merging branch: %v", err)
+			
+			conflictMergePr, resp ,err := CreatePullRequest(ctx, client, owner, repo, branch, rcBranch , "Merge conflict to "+rcVersion, "Merge conflict to "+rcVersion)
+			if err != nil {
+				errorLogger.Printf("Error creating Merge PR: %v", resp)
+				return "" ,fmt.Errorf("error creating Merge PR: %v", resp)
+			}
+			return conflictMergePr, nil
+			
+		} else {
+			errorLogger.Printf("Error merging branch: %v", err)
+			return "", fmt.Errorf("error merging branch: %v", err)
+		}
 	}
 	infoLogger.Printf("Merged branch %s from %s", branch, rcBranch)
-	infoLogger.Printf("Branch %s merged successfully: %s on %s", branch, merge.GetHTMLURL(), repo)
-	return nil
+	infoLogger.Printf("Branch %s merged successfully: %s on %s", rcBranch, merge.GetHTMLURL(), repo)
+	return "", nil
 }
 
-func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo, branch, rcVersion, prTitle, prBody string) (prUrl string, prError string, err error) {
-	rcBranch := fmt.Sprintf("rc/%s", rcVersion)
+func CreatePullRequest(ctx context.Context, client *github.Client, owner, repo, fromBranch, toBranch, prTitle, prBody string) (prUrl string, prError string, err error) {
 	pr, res, err := client.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: github.String(prTitle),
-		Head:  github.String(rcBranch),
-		Base:  github.String(branch),
+		Head:  github.String(fromBranch),
+		Base:  github.String(toBranch),
 		Body:  github.String(prBody),
 	})
 	if err != nil {
@@ -91,13 +102,13 @@ func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo
 			return "", "", fmt.Errorf("error %s creating PR: %v", res.Status, err)
 		}
 	} else {
-		infoLogger.Printf("Created PR for branch %s on Repo %s", rcBranch, repo)
+		infoLogger.Printf("Created PR for branch %s on Repo %s", toBranch, repo)
 	}
 
 	prUrl = pr.GetHTMLURL()
 	if pr.GetHTMLURL() == "" {
 		prs, _, err := client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
-			Head: fmt.Sprintf("%s:%s", owner, rcBranch),
+			Head: toBranch,
 		})
 		if err != nil {
 			errorLogger.Printf("Error getting PR: %v", err)
@@ -106,7 +117,9 @@ func CreateRcPullRequest(ctx context.Context, client *github.Client, owner, repo
 		if len(prs) > 0 {
 			prUrl = prs[0].GetHTMLURL()
 		}
+		print(prUrl)
 	}
+	infoLogger.Printf("PR URL: %s", prUrl)
 	return prUrl, prError, nil
 }
 
@@ -124,7 +137,7 @@ func RcValidate(rcVersion string) error {
 	return nil
 }
 
-func ListRepositories(ctx context.Context, client *github.Client, owner string ,excludeRepos string) ([]string, error) {
+func ListRepositories(ctx context.Context, client *github.Client, owner string, excludeRepos string) ([]string, error) {
 	repos, _, err := client.Repositories.ListByOrg(ctx, owner, nil)
 	if err != nil {
 		errorLogger.Printf("Error listing repositories: %v", err)

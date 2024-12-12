@@ -32,6 +32,7 @@ func main() {
 	prTitle := variables.PRTitle
 	prBody := variables.PRBody
 	excludeRepos := variables.ExcludeRepositories
+	rcBranch := "rc/"+rcVersion
 
 	var client *github.Client
 	if appID != "" && privateKey != "" && installationID != "" {
@@ -72,19 +73,20 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error creating branch: %v", err)
 		}
-		err = rc.MergeRcBranch(ctx, client, owner, repo, developmentBranch, rcVersion)
+		conflictMergePr, err := rc.MergeRcBranch(ctx, client, owner, repo, developmentBranch, rcVersion)
 		if err != nil {
 			log.Fatalf("Error merging branch: %v", err)
 		}
-		prUrl, prError, err := rc.CreateRcPullRequest(ctx, client, owner, repo, productionBranch, rcVersion, prTitle, prBody)
+		prUrl, prError, err := rc.CreatePullRequest(ctx, client, owner, repo, rcBranch,productionBranch , prTitle, prBody)
 		if err != nil {
 			log.Fatalf("Error creating PR: %v", err)
 		}
 
 		prMap := map[string]interface{}{
-			"repo":  repo,
-			"url":   prUrl,
-			"error": prError,
+			"repo":            repo,
+			"url":             prUrl,
+			"error":           prError,
+			"conflictMergePr": conflictMergePr,
 		}
 		prList = append(prList, prMap)
 		prDetails := fmt.Sprintf("%s:%s:%s\n", repo, prUrl, prError)
