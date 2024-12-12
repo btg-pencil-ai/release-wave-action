@@ -6,23 +6,31 @@ import (
 	"strings"
 )
 
-
-func SlackPayloadBuilder(rcVersion string,prList []map[string]interface{} ) (slackPayload string,err error) {
+func SlackPayloadBuilder(rcVersion string, prList []map[string]interface{}) (slackPayload string, err error) {
 
 	var prDetails strings.Builder
 	for _, pr := range prList {
-
-		if pr["url"] != "" {
-		prDetails.WriteString(fmt.Sprintf("• *%s:* <%s|PR Link>  %s\n", pr["repo"], pr["url"], pr["error"]))
-	
+		if pr["url"] != "" || pr["conflictMergePr"] != "" {
+			if pr["conflictMergePr"] != "" {
+				prDetails.WriteString(fmt.Sprintf(
+					"• *`%s`:*  <%s|:warning: Resolve Conflict PR> -> :pray:Then rerun the RC-automation \n",
+					pr["repo"], pr["conflictMergePr"],
+				))
+			} else {
+				prDetails.WriteString(fmt.Sprintf(
+					"• *`%s`:* <%s|:white_check_mark: PR-Link> | %s \n",
+					pr["repo"], pr["url"], pr["error"],
+				))
+			}
 		} else {
-			prDetails.WriteString(fmt.Sprintf("• *%s:* %s\n", pr["repo"], pr["error"]))
+			prDetails.WriteString(fmt.Sprintf(
+				"• *`%s`:* %s  :white_circle:\n",
+				pr["repo"], pr["error"],
+			))
 		}
 	}
-
 	// Constructing the Slack message payload
 	payload := map[string]interface{}{
-		"text": fmt.Sprintf("🚀 Release Candidate Branches for %s", rcVersion),
 		"blocks": []interface{}{
 			map[string]interface{}{
 				"type": "header",
