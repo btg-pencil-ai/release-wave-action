@@ -1,4 +1,4 @@
-package rc
+package utils
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func SlackPayloadBuilder(rcVersion string, prList []map[string]interface{}) (slackPayload string, err error) {
+func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]interface{}) (slackPayload string, err error) {
 
 	var prDetails strings.Builder
 	for _, pr := range prList {
