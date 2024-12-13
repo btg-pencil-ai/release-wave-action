@@ -2,12 +2,13 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"release-candidate/internal/configs"
 	"release-candidate/internal/usecases/githubrepo"
 	"release-candidate/internal/utils"
+	"strings"
 
 	"github.com/google/go-github/v66/github"
+	"github.com/sethvargo/go-githubactions"
 )
 
 func ReleaseCreationUseCase(ctx context.Context, l utils.LogInterface, client *github.Client, cfg *configs.Config) {
@@ -38,8 +39,8 @@ func ReleaseCreationUseCase(ctx context.Context, l utils.LogInterface, client *g
 	}
 
 	l.Info("PR details:\n%v", prUrls)
-	// l.Info("Slack payload:\n%v", prList)
-	fmt.Println(slackPayload)
+	githubactions.SetOutput("pr_urls", strings.Join(prUrls, "\n"))
+	githubactions.SetOutput("slack_payload", slackPayload)
 
 }
 
