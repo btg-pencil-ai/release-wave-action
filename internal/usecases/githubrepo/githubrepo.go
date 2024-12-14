@@ -16,6 +16,8 @@ type GitHubWebApis interface {
 	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, err error)
 	MergeBranchWithConflictPr(ctx context.Context, owner string, repo string, baseBranch string, mergeBranch string) (mergeConflictPr string, err error)
 	ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error)
+	CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error
+	ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error)
 }
 
 type GithubRepo struct {
@@ -155,4 +157,52 @@ func (g GithubRepo) ListRepositories(ctx context.Context, owner string, includeR
 	}
 	g.l.Info("Repositories: %v", repoList)
 	return repoList, nil
+}
+
+func (g GithubRepo) CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error {
+
+	payloadBytes, err := json.Marshal(clientPayload)
+	if err != nil {
+		g.l.Error("Error marshalling client payload: %v", err)
+		return fmt.Errorf("error marshalling client payload: %v", err)
+	}
+	payload := json.RawMessage(payloadBytes)
+
+	dispatchOptions := &github.DispatchRequestOptions{
+		EventType:     eventType,
+		ClientPayload: &payload,
+	}
+	_, _, err = g.client.Repositories.Dispatch(ctx, owner, repo, *dispatchOptions)
+	if err != nil {
+		g.l.Error("Error dispatching event: %v", err)
+		return fmt.Errorf("error dispatching event: %v", err)
+	}
+	g.l.Info("Dispatched event %s to %s", eventType, repo)
+
+	return nil
+}
+
+func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error) {
+	prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
+		Base:  toBranch,
+		Head:  owner + ":" + fromBranch,
+		State: state,
+	})
+
+	if err != nil {
+		g.l.Error("Error listing PRs: %v", err)
+		return nil, fmt.Errorf("error listing PRs: %v", err)
+	}
+
+	response := make([]map[string]interface{}, 0, len(prs))
+	for _, pr := range prs {
+		response = append(response, map[string]interface{}{
+			"url":        pr.GetHTMLURL(),
+			"id":         pr.GetID(),
+			"repository": repo,
+			"state":      pr.GetState(),
+		})
+	}
+
+	return response, nil
 }

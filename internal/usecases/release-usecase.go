@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"release-candidate/internal/configs"
 	"release-candidate/internal/usecases/githubrepo"
 	"release-candidate/internal/utils"
@@ -13,20 +14,12 @@ import (
 
 func ReleaseCreationUseCase(ctx context.Context, l utils.LogInterface, client *github.Client, cfg *configs.Config) {
 	l.Info("Release-Creation use case")
-	l.Info("RCVersion: %s", cfg.RCVersion)
-	cfg.RCBranch = "rc/" + cfg.RCVersion
-	err := utils.RcVersionValidate(l, cfg.RCVersion)
-	if err != nil {
-		l.Fatal("Error validating RC version: %v", err)
-	}
 
 	githubRepo := githubrepo.NewGithubRepo(client, l) // init githubRepo struct
 	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
 	if err != nil {
 		l.Fatal("Error listing repositories: %v", err)
 	}
-
-	// l.Info("Repo list: %v", repoList)
 
 	prList, prUrls, err := ReleasePrCreator(ctx, l, githubRepo, cfg, repoList)
 	if err != nil {
@@ -46,4 +39,28 @@ func ReleaseCreationUseCase(ctx context.Context, l utils.LogInterface, client *g
 
 func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client *github.Client, cfg *configs.Config) {
 	l.Info("Production-Release use case")
+
+	githubRepo := githubrepo.NewGithubRepo(client, l) // init githubRepo struct
+	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
+	if err != nil {
+		l.Fatal("Error listing repositories: %v", err)
+	}
+
+	activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
+	if err != nil {
+		slackpayload, err := utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
+		if err != nil {
+			l.Fatal("Error building slack payload: %v", err)
+		}
+		fmt.Println(slackpayload)
+	} else {
+		l.Info("Staring Production Pipeline Dispatch")
+		slackpayload, err := ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
+		if err != nil {
+			l.Fatal("Error building slack payload: %v", err)
+		}
+		fmt.Println(slackpayload)
+	}
+	
+	githubactions.SetOutput("slack_payload", "slackPayload")
 }

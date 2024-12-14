@@ -43,3 +43,42 @@ func ReleasePrCreator(ctx context.Context, l utils.LogInterface, githubRepo gith
 
 	return prList, prUrls, nil
 }
+
+func PreReleaseCheck(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, variables *configs.Config, repoList []string) (activePrs []map[string]interface{}, err error) {
+	for _, repo := range repoList {
+		prs, err := githubRepo.ListPullRequests(ctx, variables.Owner, repo, variables.RCBranch, variables.ProductionBranch, "open")
+		if err != nil {
+			l.Error("Error listing PRs for repo %s: %v", repo, err)
+			return nil, fmt.Errorf("error listing PRs for repo %s: %v", repo, err)
+		}
+		activePrs = append(activePrs, prs...)
+	}
+	if len(activePrs) > 0 {
+		l.Error("There are active PRs: %v", activePrs)
+		return activePrs, fmt.Errorf("there are active PRs: %v", activePrs)
+	}
+	return activePrs, nil
+}
+
+func ProductionWorkflowDispatch(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, variables *configs.Config, repoList []string) (slackpayload string, err error) {
+	eventType := "prod-release"
+	payload := map[string]interface{}{
+		"environment":     variables.Environment,
+		"release_version": variables.RCVersion,
+	}
+	for _, repo := range repoList {
+		err = githubRepo.CreateRepositoryDispatches(ctx, variables.Owner, repo, eventType, payload)
+		if err != nil {
+			l.Error("Error dispatching workflow for repo %s: %v", repo, err)
+			return "", fmt.Errorf("error dispatching workflow for repo %s: %v", repo, err)
+		}
+		l.Info("Production workflow dispatched for repo %s to Environment %s", repo, variables.Environment)
+	}
+	slackpayload, err = utils.ProductionWorkflowDispatchSlackPayloadBuilder(variables.RCVersion, repoList, variables.Environment)
+	if err != nil {
+		l.Error("Error building slack payload: %v", err)
+		return "", fmt.Errorf("error building slack payload: %v", err)
+	}
+	l.Info("Production workflow dispatched")
+	return slackpayload, nil
+}
