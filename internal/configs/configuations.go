@@ -1,10 +1,12 @@
-package rc
+package configs
 
 import (
 	"github.com/sethvargo/go-githubactions"
 )
 
 type Config struct {
+	LogLevel            string
+	UseCase             string
 	Owner               string
 	Token               string
 	AppID               string
@@ -15,10 +17,22 @@ type Config struct {
 	DevelopmentBranch   string
 	PRTitle             string
 	PRBody              string
+	IncludeRepositories string
 	ExcludeRepositories string
+	RCBranch            string
 }
 
-func Variables() Config {
+func Variables() (*Config, error) {
+
+	logLevel := githubactions.GetInput("log_level")
+	if logLevel == "" {
+		logLevel = "info"
+	}
+
+	usecase := githubactions.GetInput("use_case")
+	if usecase == "" {
+		githubactions.Fatalf("use_case is required")
+	}
 
 	owner := githubactions.GetInput("owner")
 	if owner == "" {
@@ -72,8 +86,11 @@ func Variables() Config {
 	}
 
 	excludeRepositories := githubactions.GetInput("exclude_repositories")
+	includeRepositories := githubactions.GetInput("include_repositories")
 
-	return Config{
+	return &Config{
+		LogLevel:            logLevel,
+		UseCase:             usecase,
 		Owner:               owner,
 		Token:               token,
 		AppID:               appID,
@@ -84,6 +101,7 @@ func Variables() Config {
 		DevelopmentBranch:   developmentBranch,
 		PRTitle:             prTitle,
 		PRBody:              prBody,
+		IncludeRepositories: includeRepositories,
 		ExcludeRepositories: excludeRepositories,
-	}
+	}, nil
 }
