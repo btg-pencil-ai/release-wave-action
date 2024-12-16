@@ -6,44 +6,21 @@ import (
 	"strings"
 )
 
-func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]interface{}) (slackPayload string, err error) {
-
-	var prDetails strings.Builder
-	for _, pr := range prList {
-		if pr["url"] != "" || pr["conflictMergePr"] != "" {
-			if pr["conflictMergePr"] != "" {
-				prDetails.WriteString(fmt.Sprintf(
-					"• *`%s`:*  <%s|:warning: Resolve Conflict PR> -> :pray:Then rerun the RC-automation \n",
-					pr["repo"], pr["conflictMergePr"],
-				))
-			} else {
-				prDetails.WriteString(fmt.Sprintf(
-					"• *`%s`:* <%s|:white_check_mark: PR-Link> | %s \n",
-					pr["repo"], pr["url"], pr["error"],
-				))
-			}
-		} else {
-			prDetails.WriteString(fmt.Sprintf(
-				"• *`%s`:* %s  :white_circle:\n",
-				pr["repo"], pr["error"],
-			))
-		}
-	}
-	// Constructing the Slack message payload
+func buildSlackPayload(headerText, sectionText, detailsText string) (string, error) {
 	payload := map[string]interface{}{
 		"blocks": []interface{}{
 			map[string]interface{}{
 				"type": "header",
 				"text": map[string]string{
 					"type": "plain_text",
-					"text": fmt.Sprintf("🚀 Release Candidate Branches for %s", rcVersion),
+					"text": headerText,
 				},
 			},
 			map[string]interface{}{
 				"type": "section",
 				"text": map[string]string{
 					"type": "mrkdwn",
-					"text": "Below is a compact list of RC branch PR details for review. 📋",
+					"text": sectionText,
 				},
 			},
 			map[string]interface{}{
@@ -53,7 +30,7 @@ func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]i
 				"type": "section",
 				"text": map[string]string{
 					"type": "mrkdwn",
-					"text": fmt.Sprintf("*PRs by Repository:* \n\n%s", prDetails.String()),
+					"text": detailsText,
 				},
 			},
 			map[string]interface{}{
@@ -75,9 +52,72 @@ func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]i
 		},
 	}
 
-	// Convert payload to JSON to send to Slack
-	payloadJSON, _ := json.MarshalIndent(payload, "", "  ")
-	slackPayload = string(payloadJSON)
+	payloadJSON, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return "", err
+	}
 
-	return slackPayload, nil
+	return string(payloadJSON), nil
+}
+
+func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]interface{}) (string, error) {
+	var prDetails strings.Builder
+	for _, pr := range prList {
+		if pr["url"] != "" || pr["conflictMergePr"] != "" {
+			if pr["conflictMergePr"] != "" {
+				prDetails.WriteString(fmt.Sprintf(
+					"• *`%s`:*  <%s|:warning: Resolve Conflict PR> -> :pray:Then rerun the RC-automation \n",
+					pr["repo"], pr["conflictMergePr"],
+				))
+			} else {
+				prDetails.WriteString(fmt.Sprintf(
+					"• *`%s`:* <%s|:white_check_mark: PR-Link> | %s \n",
+					pr["repo"], pr["url"], pr["error"],
+				))
+			}
+		} else {
+			prDetails.WriteString(fmt.Sprintf(
+				"• *`%s`:* %s  :white_circle:\n",
+				pr["repo"], pr["error"],
+			))
+		}
+	}
+
+	headerText := fmt.Sprintf("🚀 Release Candidate Branches for %s", rcVersion)
+	sectionText := "Below is a compact list of RC branch PR details for review. 📋"
+	detailsText := fmt.Sprintf("*PRs by Repository:* \n\n%s", prDetails.String())
+
+	return buildSlackPayload(headerText, sectionText, detailsText)
+}
+
+func PreReleaseErrorSlackPayloadBuilder(rcVersion string, activePrs []map[string]interface{}) (string, error) {
+	var prDetails strings.Builder
+	for _, pr := range activePrs {
+		prDetails.WriteString(fmt.Sprintf(
+			"• *`%s`:  * <%s|:warning: PR-Link> -> *%s* \n",
+			pr["repository"], pr["url"], pr["state"],
+		))
+	}
+
+	headerText := fmt.Sprintf("🚨 Pre-Release Check Failure - %s", rcVersion)
+	sectionText := "There are active PRs that need to be closed or merged before the release. Please review the list below: 📋"
+	detailsText := fmt.Sprintf("*Active PRs by Repository:* \n\n%s", prDetails.String())
+
+	return buildSlackPayload(headerText, sectionText, detailsText)
+}
+
+func ProductionWorkflowDispatchSlackPayloadBuilder(rcVersion string, repoList []string, environment string) (string, error) {
+	var repoDetails strings.Builder
+	for _, repo := range repoList {
+		repoDetails.WriteString(fmt.Sprintf(
+			"• *`%s`* :rocket: Successfully dispatched! :heavy_check_mark:\n",
+			repo,
+		))
+	}
+
+	headerText := fmt.Sprintf("🚀 Production Pipeline Dispatch - %s to %s :vertical_traffic_light:", rcVersion, environment)
+	sectionText := "The production pipeline has been dispatched for the following repositories: 🚀"
+	detailsText := fmt.Sprintf("%s", repoDetails.String())
+
+	return buildSlackPayload(headerText, sectionText, detailsText)
 }

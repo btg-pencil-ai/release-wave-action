@@ -7,6 +7,7 @@ import (
 type Config struct {
 	LogLevel            string
 	UseCase             string
+	Environment         string
 	Owner               string
 	Token               string
 	AppID               string
@@ -27,11 +28,6 @@ func Variables() (*Config, error) {
 	logLevel := githubactions.GetInput("log_level")
 	if logLevel == "" {
 		logLevel = "info"
-	}
-
-	usecase := githubactions.GetInput("use_case")
-	if usecase == "" {
-		githubactions.Fatalf("use_case is required")
 	}
 
 	owner := githubactions.GetInput("owner")
@@ -75,14 +71,26 @@ func Variables() (*Config, error) {
 		githubactions.Fatalf("development_branch is required")
 	}
 
-	prTitle := githubactions.GetInput("pr_title")
-	if prTitle == "" {
-		githubactions.Fatalf("pr_title is required")
-	}
+	var prTitle, prBody, environment string
+	usecase := githubactions.GetInput("use_case")
+	if usecase == "Production-Release" {
+		environment := githubactions.GetInput("environment")
+		if environment == "" {
+			githubactions.Fatalf("environment is required")
+		}
+	} else if usecase == "Release-Creation" {
 
-	prBody := githubactions.GetInput("pr_body")
-	if prBody == "" {
-		githubactions.Fatalf("pr_body is required")
+		prTitle := githubactions.GetInput("pr_title")
+		if prTitle == "" {
+			githubactions.Fatalf("pr_title is required")
+		}
+
+		prBody := githubactions.GetInput("pr_body")
+		if prBody == "" {
+			githubactions.Fatalf("pr_body is required")
+		}
+	} else {
+		githubactions.Fatalf("Invalid use case")
 	}
 
 	excludeRepositories := githubactions.GetInput("exclude_repositories")
@@ -101,6 +109,7 @@ func Variables() (*Config, error) {
 		DevelopmentBranch:   developmentBranch,
 		PRTitle:             prTitle,
 		PRBody:              prBody,
+		Environment:         environment,
 		IncludeRepositories: includeRepositories,
 		ExcludeRepositories: excludeRepositories,
 	}, nil
