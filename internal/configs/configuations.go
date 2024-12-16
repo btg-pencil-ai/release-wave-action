@@ -71,26 +71,15 @@ func Variables() (*Config, error) {
 		githubactions.Fatalf("development_branch is required")
 	}
 
-	var prTitle, prBody, environment string
 	usecase := githubactions.GetInput("use_case")
-	if usecase == "Production-Release" {
-		environment := githubactions.GetInput("environment")
-		if environment == "" {
-			githubactions.Fatalf("environment is required")
-		}
-	} else if usecase == "Release-Creation" {
-
-		prTitle := githubactions.GetInput("pr_title")
-		if prTitle == "" {
-			githubactions.Fatalf("pr_title is required")
-		}
-
-		prBody := githubactions.GetInput("pr_body")
-		if prBody == "" {
-			githubactions.Fatalf("pr_body is required")
-		}
-	} else {
-		githubactions.Fatalf("Invalid use case")
+	environment := githubactions.GetInput("environment")
+	prTitle := githubactions.GetInput("pr_title")
+	if prTitle == "" {
+		prTitle = "Release"
+	}
+	prBody := githubactions.GetInput("pr_body")
+	if prBody == "" {
+		prBody = "Release"
 	}
 
 	excludeRepositories := githubactions.GetInput("exclude_repositories")
