@@ -19,6 +19,7 @@ This is a custom GitHub action written in Go to automate release candidate branc
 | `private_key`       | The GitHub App private key.                              |                             | false    |
 | `installation_id`   | The GitHub App installation ID.                          |                             | false    |
 | `exclude_repos`      | A comma-separated list of repositories to exclude.      |                             | false    |
+| `environment` |  Porduction environment | | false |
 
 ## 📤 Outputs
 
