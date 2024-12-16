@@ -6,6 +6,9 @@ inputs:
     description: 'The version number of the release candidate'
     required: true
     default: '1.0.0-rc'
+  use_case:
+    description: 'The use case of the release candidate'
+    required: true
   owner:
     description: 'The owner of the repository'
     required: true
@@ -41,6 +44,16 @@ inputs:
   exclude_repositories:
     description: 'A list of repositories to exclude'
     required: false
+  include_repositories:
+    description: 'A list of repositories to include'
+    required: false
+  environment:
+    description: 'The environment'
+    required: false
+  
+outputs:
+  slack_payload:
+    description: 'The Slack payload'
 
 runs:
   using: docker
