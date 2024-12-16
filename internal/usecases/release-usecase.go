@@ -45,9 +45,9 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 	if err != nil {
 		l.Fatal("Error listing repositories: %v", err)
 	}
+	var slackPayload string
 
 	activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
-	var slackPayload string
 	if err != nil {
 		slackPayload, err := utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
 		if err != nil {
