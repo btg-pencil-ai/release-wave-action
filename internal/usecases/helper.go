@@ -61,16 +61,25 @@ func PreReleaseCheck(ctx context.Context, l utils.LogInterface, githubRepo githu
 }
 
 func ProductionWorkflowDispatch(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, variables *configs.Config, repoList []string) (slackpayload string, err error) {
-	eventType := "prod-release"
 	payload := map[string]interface{}{
 		"environment":     variables.Environment,
 		"release_version": variables.RCVersion,
 	}
+	prodWorkflowFilter := "prod-release.*"
+
 	for _, repo := range repoList {
-		err = githubRepo.CreateRepositoryDispatches(ctx, variables.Owner, repo, eventType, payload)
+		workflows, err := githubRepo.ListWorkFlowsByRepoFileFilter(ctx, variables.Owner, repo, prodWorkflowFilter)
 		if err != nil {
-			l.Error("Error dispatching workflow for repo %s: %v", repo, err)
-			return "", fmt.Errorf("error dispatching workflow for repo %s: %v", repo, err)
+			l.Error("Error listing workflows for repo %s: %v", repo, err)
+			return "", fmt.Errorf("error listing workflows for repo %s: %v", repo, err)
+		}
+
+		for _, workflow := range workflows {
+			err = githubRepo.CreateWorkflowDispatchEventByID(ctx, variables.Owner, repo, variables.ProductionBranch, workflow.ID, payload)
+			if err != nil {
+				l.Error("Error dispatching workflow for repo %s: %v", repo, err)
+				return "", fmt.Errorf("error dispatching workflow for repo %s: %v", repo, err)
+			}
 		}
 		l.Info("Production workflow dispatched for repo %s to Environment %s", repo, variables.Environment)
 	}
@@ -80,5 +89,6 @@ func ProductionWorkflowDispatch(ctx context.Context, l utils.LogInterface, githu
 		return "", fmt.Errorf("error building slack payload: %v", err)
 	}
 	l.Info("Production workflow dispatched")
+
 	return slackpayload, nil
 }

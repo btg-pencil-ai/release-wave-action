@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"release-candidate/internal/utils"
 	"strings"
 
@@ -18,6 +19,8 @@ type GitHubWebApis interface {
 	ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error)
 	CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error
 	ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error)
+	ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error)
+	CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, workflowID int64, clientPayload map[string]interface{}) error
 }
 
 type GithubRepo struct {
@@ -205,4 +208,55 @@ func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo str
 	}
 
 	return response, nil
+}
+
+func (g GithubRepo) ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error) {
+	workflowList, _, err := g.client.Actions.ListWorkflows(ctx, owner, repo, &github.ListOptions{})
+	if err != nil {
+		g.l.Error("Error listing workflows: %v", err)
+		return nil, fmt.Errorf("error listing workflows: %v", err)
+	}
+
+	response := make([]RespWorkflow, 0, len(workflowList.Workflows))
+	for _, workflow := range workflowList.Workflows {
+		response = append(response, RespWorkflow{
+			ID:   workflow.GetID(),
+			Name: workflow.GetName(),
+			URL:  workflow.GetURL(),
+			Path: workflow.GetPath(),
+			Repo: repo,
+		})
+	}
+	filteredWorkflows := make([]RespWorkflow, 0)
+	re, err := regexp.Compile(fileFilterRegex)
+	if err != nil {
+		g.l.Error("Error compiling regex: %v", err)
+		return nil, fmt.Errorf("error compiling regex: %v", err)
+	}
+	for _, workflow := range response {
+		if re.MatchString(workflow.Path) {
+			filteredWorkflows = append(filteredWorkflows, workflow)
+		}
+	}
+
+	fmt.Printf("Workflows: %v", filteredWorkflows)
+
+	return filteredWorkflows, nil
+}
+
+func (g GithubRepo) CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, ref string, workflowID int64, clientPayload map[string]interface{}) error {
+
+	dispatchOptions := &github.CreateWorkflowDispatchEventRequest{
+		Ref:    "refs/heads/" + ref,
+		Inputs: clientPayload,
+	}
+
+	_, err := g.client.Actions.CreateWorkflowDispatchEventByID(ctx, owner, repo, workflowID, *dispatchOptions)
+	if err != nil {
+		g.l.Error("Error dispatching event: %v", err)
+		return fmt.Errorf("error dispatching event: %v", err)
+	}
+	g.l.Info("Dispatched event to %s", repo)
+
+	return nil
 }
