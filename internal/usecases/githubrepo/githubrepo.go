@@ -118,7 +118,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 	prUrl = pr.GetHTMLURL()
 	if prUrl == "" {
 		prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
-			Head: toBranch,
+			Head:  owner + ":" + fromBranch,
 		})
 		if err != nil {
 			g.l.Error("Error getting PR: %v", err)
