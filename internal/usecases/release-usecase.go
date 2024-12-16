@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"release-candidate/internal/configs"
 	"release-candidate/internal/usecases/githubrepo"
 	"release-candidate/internal/utils"
@@ -49,18 +48,16 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 
 	activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
 	if err != nil {
-		slackPayload, err := utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
+		slackPayload, err = utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
 		if err != nil {
 			l.Fatal("Error building slack payload: %v", err)
 		}
-		fmt.Println(slackPayload)
 	} else {
 		l.Info("Staring Production Pipeline Dispatch")
-		slackPayload, err := ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
+		slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
 		if err != nil {
 			l.Fatal("Error building slack payload: %v", err)
 		}
-		fmt.Println(slackPayload)
 	}
 
 	githubactions.SetOutput("slack_payload", slackPayload)
