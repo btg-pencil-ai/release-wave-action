@@ -15,7 +15,7 @@ func ReleaseCreationUseCase(ctx context.Context, l utils.LogInterface, client *g
 	l.Info("Release-Creation use case")
 
 	githubRepo := githubrepo.NewGithubRepo(client, l) // init githubRepo struct
-	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
+	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.UseCase, cfg.IncludeRepositories, cfg.ExcludeRepositories, cfg.ExcludeProdReleaseRepositories)
 	if err != nil {
 		l.Fatal("Error listing repositories: %v", err)
 	}
@@ -40,7 +40,7 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 	l.Info("Production-Release use case")
 
 	githubRepo := githubrepo.NewGithubRepo(client, l) // init githubRepo struct
-	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
+	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.UseCase, cfg.IncludeRepositories, cfg.ExcludeRepositories, cfg.ExcludeProdReleaseRepositories)
 	if err != nil {
 		l.Fatal("Error listing repositories: %v", err)
 	}

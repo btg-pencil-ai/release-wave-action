@@ -118,7 +118,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 	prUrl = pr.GetHTMLURL()
 	if prUrl == "" {
 		prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
-			Head:  owner + ":" + fromBranch,
+			Head: owner + ":" + fromBranch,
 		})
 		if err != nil {
 			g.l.Error("Error getting PR: %v", err)
@@ -133,7 +133,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 	return prUrl, prError, nil
 }
 
-func (g GithubRepo) ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error) {
+func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase string, includeRepositories string, excludeRepositories string, excludeProdReleaseRepostories string) ([]string, error) {
 	var repoList []string
 	if includeRepositories != "" {
 		repoList = strings.Split(includeRepositories, ",")
@@ -153,9 +153,14 @@ func (g GithubRepo) ListRepositories(ctx context.Context, owner string, includeR
 		}
 
 		for _, repo := range repos {
-			if !strings.Contains(excludeRepositories, repo.GetName()) {
-				repoList = append(repoList, repo.GetName())
+			repoName := repo.GetName()
+			if strings.Contains(excludeRepositories, repoName) {
+				continue
 			}
+			if usecase == "Production-Release" && strings.Contains(excludeProdReleaseRepostories, repoName) {
+				continue
+			}
+			repoList = append(repoList, repoName)
 		}
 	}
 	g.l.Info("Repositories: %v", repoList)
