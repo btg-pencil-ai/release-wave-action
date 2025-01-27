@@ -62,7 +62,8 @@ func buildSlackPayload(headerText, sectionText, detailsText string) (string, err
 
 func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]interface{}) (string, error) {
 	var prDetails strings.Builder
-	for _, pr := range prList {
+	var sections []string
+	for i, pr := range prList {
 		if pr["url"] != "" || pr["conflictMergePr"] != "" {
 			if pr["conflictMergePr"] != "" {
 				prDetails.WriteString(fmt.Sprintf(
@@ -81,43 +82,75 @@ func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]i
 				pr["repo"], pr["error"],
 			))
 		}
+
+		// Split into sections every 5 PRs
+		if (i+1)%5 == 0 || i == len(prList)-1 {
+			sections = append(sections, prDetails.String())
+			prDetails.Reset()
+		}
+	}
+
+	detailsText := "*PRs by Repository:* \n\n"
+	for _, section := range sections {
+		detailsText += section + "\n\n"
 	}
 
 	headerText := fmt.Sprintf("🚀 Release Candidate Branches for %s", rcVersion)
 	sectionText := "Below is a compact list of RC branch PR details for review. 📋"
-	detailsText := fmt.Sprintf("*PRs by Repository:* \n\n%s", prDetails.String())
 
 	return buildSlackPayload(headerText, sectionText, detailsText)
 }
 
 func PreReleaseErrorSlackPayloadBuilder(rcVersion string, activePrs []map[string]interface{}) (string, error) {
 	var prDetails strings.Builder
-	for _, pr := range activePrs {
+	var sections []string
+	for i, pr := range activePrs {
 		prDetails.WriteString(fmt.Sprintf(
 			"• *`%s`:  * <%s|:warning: PR-Link> -> *%s* \n",
 			pr["repository"], pr["url"], pr["state"],
 		))
+
+		// Split into sections every 5 PRs
+		if (i+1)%5 == 0 || i == len(activePrs)-1 {
+			sections = append(sections, prDetails.String())
+			prDetails.Reset()
+		}
+	}
+
+	detailsText := "*Active PRs by Repository:* \n\n"
+	for _, section := range sections {
+		detailsText += section + "\n\n"
 	}
 
 	headerText := fmt.Sprintf("🚨 Pre-Release Check Failure - %s", rcVersion)
 	sectionText := "There are active PRs that need to be closed or merged before the release. Please review the list below: 📋"
-	detailsText := fmt.Sprintf("*Active PRs by Repository:* \n\n%s", prDetails.String())
 
 	return buildSlackPayload(headerText, sectionText, detailsText)
 }
 
 func ProductionWorkflowDispatchSlackPayloadBuilder(rcVersion string, repoList []string, environment string) (string, error) {
 	var repoDetails strings.Builder
-	for _, repo := range repoList {
+	var sections []string
+	for i, repo := range repoList {
 		repoDetails.WriteString(fmt.Sprintf(
 			"• *`%s`* :rocket: Successfully dispatched! :heavy_check_mark:\n",
 			repo,
 		))
+
+		// Split into sections every 5 repositories
+		if (i+1)%5 == 0 || i == len(repoList)-1 {
+			sections = append(sections, repoDetails.String())
+			repoDetails.Reset()
+		}
+	}
+
+	detailsText := "*Repositories Dispatched:* \n\n"
+	for _, section := range sections {
+		detailsText += section + "\n\n"
 	}
 
 	headerText := fmt.Sprintf("🚀 Production Pipeline Dispatch - %s to %s :vertical_traffic_light:", rcVersion, environment)
 	sectionText := "The production pipeline has been dispatched for the following repositories: 🚀"
-	detailsText := fmt.Sprintf("%s", repoDetails.String())
 
 	return buildSlackPayload(headerText, sectionText, detailsText)
 }
