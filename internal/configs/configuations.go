@@ -5,22 +5,23 @@ import (
 )
 
 type Config struct {
-	LogLevel            string
-	UseCase             string
-	Environment         string
-	Owner               string
-	Token               string
-	AppID               string
-	InstallationID      string
-	PrivateKey          string
-	RCVersion           string
-	ProductionBranch    string
-	DevelopmentBranch   string
-	PRTitle             string
-	PRBody              string
-	IncludeRepositories string
-	ExcludeRepositories string
-	RCBranch            string
+	LogLevel                       string
+	UseCase                        string
+	Environment                    string
+	Owner                          string
+	Token                          string
+	AppID                          string
+	InstallationID                 string
+	PrivateKey                     string
+	RCVersion                      string
+	ProductionBranch               string
+	DevelopmentBranch              string
+	PRTitle                        string
+	PRBody                         string
+	IncludeRepositories            string
+	ExcludeRepositories            string
+	ExcludeProdReleaseRepositories string
+	RCBranch                       string
 }
 
 func Variables() (*Config, error) {
