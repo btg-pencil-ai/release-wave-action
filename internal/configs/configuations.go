@@ -85,22 +85,24 @@ func Variables() (*Config, error) {
 
 	excludeRepositories := githubactions.GetInput("exclude_repositories")
 	includeRepositories := githubactions.GetInput("include_repositories")
+	excludeProdReleaseRepostories := githubactions.GetInput("exclude_prod_release_repositories")
 
 	return &Config{
-		LogLevel:            logLevel,
-		UseCase:             usecase,
-		Owner:               owner,
-		Token:               token,
-		AppID:               appID,
-		PrivateKey:          privateKey,
-		InstallationID:      installationId,
-		RCVersion:           rcVersion,
-		ProductionBranch:    productionBranch,
-		DevelopmentBranch:   developmentBranch,
-		PRTitle:             prTitle,
-		PRBody:              prBody,
-		Environment:         environment,
-		IncludeRepositories: includeRepositories,
-		ExcludeRepositories: excludeRepositories,
+		LogLevel:                       logLevel,
+		UseCase:                        usecase,
+		Owner:                          owner,
+		Token:                          token,
+		AppID:                          appID,
+		PrivateKey:                     privateKey,
+		InstallationID:                 installationId,
+		RCVersion:                      rcVersion,
+		ProductionBranch:               productionBranch,
+		DevelopmentBranch:              developmentBranch,
+		PRTitle:                        prTitle,
+		PRBody:                         prBody,
+		Environment:                    environment,
+		IncludeRepositories:            includeRepositories,
+		ExcludeRepositories:            excludeRepositories,
+		ExcludeProdReleaseRepositories: excludeProdReleaseRepostories,
 	}, nil
 }
