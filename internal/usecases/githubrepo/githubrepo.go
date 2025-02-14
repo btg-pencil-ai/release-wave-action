@@ -153,6 +153,9 @@ func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase 
 		}
 
 		for _, repo := range repos {
+			if repo.GetArchived() {
+				continue
+			}
 			repoName := repo.GetName()
 			if strings.Contains(excludeRepositories, repoName) {
 				continue
