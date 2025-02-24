@@ -50,6 +50,8 @@ inputs:
   environment:
     description: 'The environment'
     required: false
+  exclude_prod_release_repositories:
+    description: 'A list of repositories to exclude for Production-Release'
   
 outputs:
   slack_payload:
