@@ -146,7 +146,11 @@ func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase 
 		}
 
 	} else {
-		repos, _, err := g.client.Repositories.ListByOrg(ctx, owner, &github.RepositoryListByOrgOptions{})
+		repos, _, err := g.client.Repositories.ListByOrg(ctx, owner, &github.RepositoryListByOrgOptions{
+			ListOptions: github.ListOptions{
+				PerPage: 500,
+			},
+		})
 		if err != nil {
 			g.l.Error("Error listing repositories: %v", err)
 			return nil, fmt.Errorf("error listing repositories: %v", err)
