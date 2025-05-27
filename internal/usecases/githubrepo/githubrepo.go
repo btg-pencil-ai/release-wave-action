@@ -211,12 +211,29 @@ func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo str
 
 	response := make([]map[string]interface{}, 0, len(prs))
 	for _, pr := range prs {
-		response = append(response, map[string]interface{}{
-			"url":        pr.GetHTMLURL(),
-			"id":         pr.GetID(),
-			"repository": repo,
-			"state":      pr.GetState(),
-		})
+		if pr.Head.Ref != nil {
+			prHeadBranch:= *pr.Head.Ref
+			if prHeadBranch == fromBranch {
+				g.l.Info("Listing pr from current rc branch: %v",prHeadBranch)
+				response = append(response, map[string]interface{}{
+					"url":        pr.GetHTMLURL(),
+					"id":         pr.GetID(),
+					"repository": repo,
+					"state":      pr.GetState(),
+				})
+			} else{
+				g.l.Info("skipping pr from non current rc branch %V",prHeadBranch)
+			}
+
+		} else {
+			g.l.Info("Listing pr as Head info can't be obtained")
+			response = append(response, map[string]interface{}{
+				"url":        pr.GetHTMLURL(),
+				"id":         pr.GetID(),
+				"repository": repo,
+				"state":      pr.GetState(),
+			})
+		}
 	}
 
 	return response, nil
