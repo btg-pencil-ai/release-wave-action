@@ -54,10 +54,10 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 		}
 	} else {
 		l.Info("Staring Production Pipeline Dispatch")
-		slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
-		if err != nil {
-			l.Fatal("Error building slack payload: %v", err)
-		}
+		// slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
+		// if err != nil {
+		// l.Fatal("Error building slack payload: %v", err)
+		// }
 	}
 
 	githubactions.SetOutput("slack_payload", slackPayload)
