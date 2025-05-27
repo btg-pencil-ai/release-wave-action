@@ -222,7 +222,7 @@ func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo str
 					"state":      pr.GetState(),
 				})
 			} else{
-				g.l.Info("skipping pr from non current rc branch",prHeadBranch)
+				g.l.Info("skipping pr from non current rc branch %V",prHeadBranch)
 			}
 
 		} else {
