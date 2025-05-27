@@ -136,7 +136,9 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase string, includeRepositories string, excludeRepositories string, excludeProdReleaseRepostories string) ([]string, error) {
 	var repoList []string
 	if includeRepositories != "" {
+		g.l.Info("empty listig")
 		repoList = strings.Split(includeRepositories, ",")
+		g.l.Info(" list: %v", repoList)
 		for _, repo := range repoList {
 			_, _, err := g.client.Repositories.Get(ctx, owner, repo)
 			if err != nil {
@@ -198,12 +200,14 @@ func (g GithubRepo) CreateRepositoryDispatches(ctx context.Context, owner string
 }
 
 func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error) {
+
 	prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 		Base:  toBranch,
 		Head:  owner + "/" + fromBranch,
 		State: state,
 	})
 
+	g.l.Info("pr from inside +++ %v", err)
 	if err != nil {
 		g.l.Error("Error listing PRs: %v", err)
 		return nil, fmt.Errorf("error listing PRs: %v", err)
@@ -211,12 +215,29 @@ func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo str
 
 	response := make([]map[string]interface{}, 0, len(prs))
 	for _, pr := range prs {
-		response = append(response, map[string]interface{}{
-			"url":        pr.GetHTMLURL(),
-			"id":         pr.GetID(),
-			"repository": repo,
-			"state":      pr.GetState(),
-		})
+		if pr.Head.Ref != nil {
+			prHeadBranch:= *pr.Head.Ref
+			if prHeadBranch == fromBranch {
+				g.l.Info("Listing pr from current rc branch: %v",prHeadBranch)
+				response = append(response, map[string]interface{}{
+					"url":        pr.GetHTMLURL(),
+					"id":         pr.GetID(),
+					"repository": repo,
+					"state":      pr.GetState(),
+				})
+			} else{
+				g.l.Info("skipping pr from non current rc branch",prHeadBranch)
+			}
+
+		} else {
+			g.l.Info("Listing pr as Head info can't be obtained")
+			response = append(response, map[string]interface{}{
+				"url":        pr.GetHTMLURL(),
+				"id":         pr.GetID(),
+				"repository": repo,
+				"state":      pr.GetState(),
+			})
+		}
 	}
 
 	return response, nil
