@@ -200,7 +200,7 @@ func (g GithubRepo) CreateRepositoryDispatches(ctx context.Context, owner string
 func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error) {
 	prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 		Base:  toBranch,
-		Head:  owner + ":" + fromBranch,
+		Head:  owner + "/" + fromBranch,
 		State: state,
 	})
 
