@@ -18,16 +18,34 @@ func ReleasePrCreator(ctx context.Context, l utils.LogInterface, githubRepo gith
 			return nil, nil, fmt.Errorf("error creating branch for repo %s: %v", repo, err)
 		}
 
-		conflictMergePr, err := githubRepo.MergeBranchWithConflictPr(ctx, variables.Owner, repo, variables.DevelopmentBranch, variables.RCBranch)
+		// Check if PR already exists from RC to production branch
+		existingPrs, err := githubRepo.ListPullRequests(ctx, variables.Owner, repo, variables.RCBranch, variables.ProductionBranch, "open")
 		if err != nil {
-			l.Error("Error merging branch for repo %s: %v", repo, err)
-			return nil, nil, fmt.Errorf("error merging branch for repo %s: %v", repo, err)
+			l.Error("Error checking existing PRs for repo %s: %v", repo, err)
+			return nil, nil, fmt.Errorf("error checking existing PRs for repo %s: %v", repo, err)
 		}
 
-		prUrl, prError, err := githubRepo.CreatePullRequest(ctx, variables.Owner, repo, variables.RCBranch, variables.ProductionBranch, variables.PRTitle, variables.PRBody)
-		if err != nil {
-			l.Error("Error creating PR for repo %s: %v", repo, err)
-			return nil, nil, fmt.Errorf("error creating PR for repo %s: %v", repo, err)
+		var conflictMergePr string
+		var prUrl, prError string
+
+		if len(existingPrs) > 0 {
+			// PR already exists, skip merging development changes and use existing PR
+			l.Info("PR already exists for repo %s, skipping development merge to preserve RC stability", repo)
+			prUrl = existingPrs[0]["url"].(string)
+			prError = "PR already exists - development merge skipped"
+		} else {
+			// No existing PR, proceed with merging development and creating new PR
+			conflictMergePr, err = githubRepo.MergeBranchWithConflictPr(ctx, variables.Owner, repo, variables.DevelopmentBranch, variables.RCBranch)
+			if err != nil {
+				l.Error("Error merging branch for repo %s: %v", repo, err)
+				return nil, nil, fmt.Errorf("error merging branch for repo %s: %v", repo, err)
+			}
+
+			prUrl, prError, err = githubRepo.CreatePullRequest(ctx, variables.Owner, repo, variables.RCBranch, variables.ProductionBranch, variables.PRTitle, variables.PRBody)
+			if err != nil {
+				l.Error("Error creating PR for repo %s: %v", repo, err)
+				return nil, nil, fmt.Errorf("error creating PR for repo %s: %v", repo, err)
+			}
 		}
 
 		prMap := map[string]interface{}{
