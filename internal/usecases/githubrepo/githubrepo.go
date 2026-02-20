@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"release-candidate/internal/utils"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v66/github"
 )
@@ -59,12 +60,27 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 }
 
 func (g GithubRepo) MergeBranchWithConflictPr(ctx context.Context, owner string, repo string, baseBranch string, mergeBranch string) (mergeConflictPr string, err error) {
-	_, res, err := g.client.Repositories.Merge(ctx, owner, repo, &github.RepositoryMergeRequest{
-		Base:          github.String(mergeBranch),
-		Head:          github.String(baseBranch),
-		CommitMessage: github.String(fmt.Sprintf("Merge branch '%s' into '%s' on %s", mergeBranch, baseBranch, repo)),
-	})
-	if err != nil {
+	maxRetries := 5
+	retryDelay := 5 * time.Second
+	initialWait := 1 * time.Second
+
+	// Wait 1 second before the first merge attempt
+	time.Sleep(initialWait)
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		_, res, err := g.client.Repositories.Merge(ctx, owner, repo, &github.RepositoryMergeRequest{
+			Base:          github.String(mergeBranch),
+			Head:          github.String(baseBranch),
+			CommitMessage: github.String(fmt.Sprintf("Merge branch '%s' into '%s' on %s", mergeBranch, baseBranch, repo)),
+		})
+
+		if err == nil {
+			// Merge successful
+			g.l.Info("Merged branch %s into %s on %s", baseBranch, mergeBranch, repo)
+			return "", nil
+		}
+
+		// Handle 409 conflict (merge conflict) - don't retry, handle immediately
 		if res != nil && res.StatusCode == 409 {
 			g.l.Error("Merge conflict: %v", err)
 			prURL, _, err := g.CreatePullRequest(ctx, owner, repo, baseBranch, mergeBranch, "Merge conflict to "+mergeBranch, "Merge conflict to "+mergeBranch)
@@ -74,11 +90,26 @@ func (g GithubRepo) MergeBranchWithConflictPr(ctx context.Context, owner string,
 			}
 			return prURL, nil
 		}
+
+		// Handle 404 error - retry with delay
+		if res != nil && res.StatusCode == 404 {
+			if attempt < maxRetries {
+				g.l.Warn("Merge failed with 404 error (attempt %d/%d), retrying after %v: %v", attempt, maxRetries, retryDelay, err)
+				time.Sleep(retryDelay)
+				continue
+			} else {
+				g.l.Error("Merge failed with 404 error after %d attempts: %v", maxRetries, err)
+				return "", fmt.Errorf("error merging branch after %d retries: %v", maxRetries, err)
+			}
+		}
+
+		// Other errors - return immediately without retry
 		g.l.Error("Error merging branch: %v", err)
 		return "", fmt.Errorf("error merging branch: %v", err)
 	}
-	g.l.Info("Merged branch %s into %s on %s", baseBranch, mergeBranch, repo)
-	return "", nil
+
+	// Should not reach here, but handle just in case
+	return "", fmt.Errorf("error merging branch: max retries exceeded")
 }
 
 func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, err error) {
