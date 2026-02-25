@@ -54,6 +54,7 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 	if err != nil {
 		l.Fatal("Error listing repositories: %v", err)
 	}
+	l.Info("repoList: %v", repoList)
 	var slackPayload string
 
 	activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
@@ -67,6 +68,32 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 		slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
 		if err != nil {
 			l.Fatal("Error building slack payload: %v", err)
+		}
+	}
+
+	// Fetch active epics from Hydra webhook
+	activeEpics, err := FetchHydraActiveEpics(l, cfg.HydraWebhookURL, cfg.HydraWebhookSecret)
+	if err != nil {
+		l.Fatal("Error fetching active epics: %v", err)
+	}
+
+	if len(activeEpics) > 0 {
+		l.Info("Active epics: %v", activeEpics)
+
+		// Find epic branches in all repos
+		epicBranchResults, err := FindEpicBranchesInRepos(ctx, l, githubRepo, cfg.Owner, repoList, activeEpics)
+		if err != nil {
+			l.Fatal("Error finding epic branches: %v", err)
+		}
+
+		// Log results for each epic
+		for _, epic := range activeEpics {
+			reposWithBranch := GetReposWithEpicBranch(epicBranchResults, epic)
+			if len(reposWithBranch) > 0 {
+				l.Info("Epic '%s' has branches in repos: %v", epic, reposWithBranch)
+			} else {
+				l.Info("Epic '%s' has no matching branches in any repo", epic)
+			}
 		}
 	}
 

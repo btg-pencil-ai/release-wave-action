@@ -320,3 +320,33 @@ func (g GithubRepo) CreateWorkflowDispatchEventByID(ctx context.Context, owner s
 
 	return nil
 }
+
+// ListEpicBranches returns all branches matching epic-* pattern (case insensitive)
+func (g GithubRepo) ListEpicBranches(ctx context.Context, owner string, repo string) ([]string, error) {
+	var epicBranches []string
+	opts := &github.BranchListOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+
+	for {
+		branches, resp, err := g.client.Repositories.ListBranches(ctx, owner, repo, opts)
+		if err != nil {
+			g.l.Error("Error listing branches for %s: %v", repo, err)
+			return nil, fmt.Errorf("error listing branches for %s: %v", repo, err)
+		}
+
+		for _, branch := range branches {
+			branchName := branch.GetName()
+			if strings.HasPrefix(strings.ToLower(branchName), "epic-") {
+				epicBranches = append(epicBranches, branchName)
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return epicBranches, nil
+}

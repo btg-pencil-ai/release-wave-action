@@ -22,6 +22,8 @@ type Config struct {
 	ExcludeRepositories            string
 	ExcludeProdReleaseRepositories string
 	RCBranch                       string
+	HydraWebhookURL            	   string
+	HydraWebhookSecret             string
 }
 
 func Variables() (*Config, error) {
@@ -87,6 +89,11 @@ func Variables() (*Config, error) {
 	includeRepositories := githubactions.GetInput("include_repositories")
 	excludeProdReleaseRepostories := githubactions.GetInput("exclude_prod_release_repositories")
 
+    hydraWebhookURL := githubactions.GetInput("hydra_webhook_url")
+	hydraWebhookSecret := githubactions.GetInput("hydra_webhook_secret")
+	if hydraWebhookSecret != "" {
+		githubactions.AddMask(hydraWebhookSecret)
+	}
 	return &Config{
 		LogLevel:                       logLevel,
 		UseCase:                        usecase,
@@ -104,5 +111,7 @@ func Variables() (*Config, error) {
 		IncludeRepositories:            includeRepositories,
 		ExcludeRepositories:            excludeRepositories,
 		ExcludeProdReleaseRepositories: excludeProdReleaseRepostories,
+		HydraWebhookURL:                hydraWebhookURL,
+		HydraWebhookSecret:             hydraWebhookSecret,
 	}, nil
 }
