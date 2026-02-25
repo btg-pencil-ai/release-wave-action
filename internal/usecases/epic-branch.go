@@ -30,12 +30,11 @@ func ConvertToNamespace(input string) string {
 	return namespace
 }
 
-// FindMatchingBranches finds all branches that match the input epic after formatting
+// FindMatchingBranches finds all branches that match the input epic
+// inputEpic is expected to already be formatted (from Hydra webhook)
 // Returns all matching branch names (there could be multiple matches)
 func FindMatchingBranches(inputEpic string, epicBranches []string) []string {
-	formattedInput := ConvertToNamespace(inputEpic)
-
-	if formattedInput == "" {
+	if inputEpic == "" {
 		return nil
 	}
 
@@ -48,12 +47,9 @@ func FindMatchingBranches(inputEpic string, epicBranches []string) []string {
 			continue
 		}
 
-		// Try match after formatting (format full branch name including epic- prefix)
+		// Try match after formatting the branch name (branch from GitHub might have different casing/format)
 		formattedBranch := ConvertToNamespace(branch)
-		fmt.Printf("branch: %s\n", branch)
-		fmt.Printf("formattedBranch: %s\n", formattedBranch)
-		fmt.Printf("formattedInput: %s\n", formattedInput)
-		if formattedBranch == formattedInput {
+		if formattedBranch == inputEpic {
 			matchedBranches = append(matchedBranches, branch)
 		}
 	}
@@ -128,4 +124,126 @@ func GetReposWithEpicBranch(results map[string][]EpicBranchMatch, epic string) [
 		}
 	}
 	return repos
+}
+
+// SyncBranchResult represents the result of creating a sync branch
+type SyncBranchResult struct {
+	Repo            string
+	Epic            string
+	BranchName      string   // sync branch name (e.g., sync/v7.0.0-epic-beta-022)
+	EpicBranchNames []string // target epic branch names (e.g., epic-beta-022, epic-BETA-022)
+	Created         bool
+	Error           string
+}
+
+// CreateSyncBranchesForEpics creates sync branches for each epic in repos where the epic branch exists
+// Branch name format: sync/{release-version}-{formatted-epic-name}
+func CreateSyncBranchesForEpics(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, owner string, baseBranch string, releaseVersion string, epicBranchResults map[string][]EpicBranchMatch) ([]SyncBranchResult, error) {
+	var results []SyncBranchResult
+	var errs []string
+
+	for repo, matches := range epicBranchResults {
+		for _, match := range matches {
+			if !match.Found {
+				continue
+			}
+
+			// Epic name is already formatted from Hydra webhook
+			syncBranchName := fmt.Sprintf("sync/%s-%s", releaseVersion, match.Epic)
+
+			l.Info("Creating sync branch '%s' in repo '%s' from '%s'", syncBranchName, repo, baseBranch)
+
+			err := githubRepo.CreateBranch(ctx, owner, repo, baseBranch, syncBranchName)
+
+			result := SyncBranchResult{
+				Repo:            repo,
+				Epic:            match.Epic,
+				BranchName:      syncBranchName,
+				EpicBranchNames: match.BranchNames,
+			}
+
+			if err != nil {
+				l.Error("Error creating sync branch '%s' in repo '%s': %v", syncBranchName, repo, err)
+				result.Created = false
+				result.Error = err.Error()
+				errs = append(errs, fmt.Sprintf("%s/%s: %v", repo, syncBranchName, err))
+			} else {
+				l.Info("Successfully created sync branch '%s' in repo '%s'", syncBranchName, repo)
+				result.Created = true
+
+			}
+
+			results = append(results, result)
+		}
+	}
+
+	if len(errs) > 0 {
+		return results, fmt.Errorf("failed to create some sync branches: %s", strings.Join(errs, "; "))
+	}
+
+	return results, nil
+}
+
+// SyncToEpicPRResult represents the result of creating a PR from sync branch to epic branch
+type SyncToEpicPRResult struct {
+	Repo       string
+	SyncBranch string
+	EpicBranch string
+	PRURL      string
+	Created    bool
+	Error      string
+}
+
+// CreatePRsFromSyncToEpic creates PRs from sync branches to their corresponding epic branches
+func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, owner string, releaseVersion string, syncResults []SyncBranchResult) ([]SyncToEpicPRResult, error) {
+	var results []SyncToEpicPRResult
+	var errs []string
+
+	for _, syncResult := range syncResults {
+		// Skip if sync branch wasn't created successfully
+		if !syncResult.Created {
+			l.Debug("Skipping PR creation for %s/%s - sync branch was not created", syncResult.Repo, syncResult.BranchName)
+			continue
+		}
+
+		// Create PR to each matching epic branch for each epic in each repo
+		for _, epicBranch := range syncResult.EpicBranchNames {
+			prTitle := fmt.Sprintf("Sync %s to %s", releaseVersion, epicBranch)
+			prBody := fmt.Sprintf("Syncing release %s changes to epic branch %s", releaseVersion, epicBranch)
+
+			l.Info("Creating PR from '%s' to '%s' in repo '%s'", syncResult.BranchName, epicBranch, syncResult.Repo)
+
+			prURL, prError, err := githubRepo.CreatePullRequest(ctx, owner, syncResult.Repo, syncResult.BranchName, epicBranch, prTitle, prBody)
+
+			result := SyncToEpicPRResult{
+				Repo:       syncResult.Repo,
+				SyncBranch: syncResult.BranchName,
+				EpicBranch: epicBranch,
+			}
+
+			if err != nil {
+				l.Error("Error creating PR from '%s' to '%s' in repo '%s': %v", syncResult.BranchName, epicBranch, syncResult.Repo, err)
+				result.Created = false
+				result.Error = err.Error()
+				errs = append(errs, fmt.Sprintf("%s: %s->%s: %v", syncResult.Repo, syncResult.BranchName, epicBranch, err))
+			} else if prError != "" {
+				l.Warn("PR created with warning from '%s' to '%s' in repo '%s': %s", syncResult.BranchName, epicBranch, syncResult.Repo, prError)
+				result.Created = true
+				result.PRURL = prURL
+				result.Error = prError
+			} else {
+				l.Info("Successfully created PR from '%s' to '%s' in repo '%s': %s", syncResult.BranchName, epicBranch, syncResult.Repo, prURL)
+				result.Created = true
+				result.PRURL = prURL
+			}
+
+			results = append(results, result)
+		}
+	}
+
+	if len(errs) > 0 {
+		return results, fmt.Errorf("failed to create some PRs: %s", strings.Join(errs, "; "))
+	}
+
+	return results, nil
 }

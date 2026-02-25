@@ -70,7 +70,10 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 			l.Fatal("Error building slack payload: %v", err)
 		}
 	}
+	safeSetOutput("slack_payload", slackPayload, l)
 
+	if cfg.EnableMainToEpicSync {
+		l.Info("Starting Main to Epic Sync")
 	// Fetch active epics from Hydra webhook
 	activeEpics, err := FetchHydraActiveEpics(l, cfg.HydraWebhookURL, cfg.HydraWebhookSecret)
 	if err != nil {
@@ -95,7 +98,42 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 				l.Info("Epic '%s' has no matching branches in any repo", epic)
 			}
 		}
-	}
 
-	safeSetOutput("slack_payload", slackPayload, l)
-}
+       
+
+		// Create sync branches for each epic in repos where epic branch exists
+		syncResults, err := CreateSyncBranchesForEpics(ctx, l, githubRepo, cfg.Owner, cfg.ProductionBranch, cfg.RCVersion, epicBranchResults)
+		if err != nil {
+			l.Fatal("Error creating sync branches: %v", err)
+		}
+
+		// Log sync branch creation results
+		for _, result := range syncResults {
+			if result.Created {
+				l.Info("Sync branch '%s' created in repo '%s' for epic '%s'", result.BranchName, result.Repo, result.Epic)
+			} else {
+				l.Error("Failed to create sync branch '%s' in repo '%s': %s", result.BranchName, result.Repo, result.Error)
+			}
+		}
+
+		// Create PRs from sync branches to epic branches
+		prResults, err := CreatePRsFromSyncToEpic(ctx, l, githubRepo, cfg.Owner, cfg.RCVersion, syncResults)
+		if err != nil {
+			l.Error("Some PRs failed to create: %v", err)
+		}
+
+		// Log PR creation results
+		for _, result := range prResults {
+			if result.Created {
+				l.Info("PR created: %s -> %s in repo '%s': %s", result.SyncBranch, result.EpicBranch, result.Repo, result.PRURL)
+			} else {
+				l.Error("Failed to create PR: %s -> %s in repo '%s': %s", result.SyncBranch, result.EpicBranch, result.Repo, result.Error)
+			}
+		}
+	}
+} else {
+	l.Info("Main to Epic Sync is disabled")
+}}
+
+	
+
