@@ -22,6 +22,7 @@ type GitHubWebApis interface {
 	ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error)
 	ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error)
 	CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, workflowID int64, clientPayload map[string]interface{}) error
+	ListEpicBranches(ctx context.Context, owner string, repo string) ([]string, error)
 	DeleteBranch(ctx context.Context, owner string, repo string, branchName string) error
 	ClosePullRequest(ctx context.Context, owner string, repo string, prNumber int, comment string) error
 	ListOpenPullRequestsByBase(ctx context.Context, owner string, repo string, baseBranch string) ([]*github.PullRequest, error)
@@ -329,6 +330,8 @@ func (g GithubRepo) ListEpicBranches(ctx context.Context, owner string, repo str
 	var epicBranches []string
 	opts := &github.BranchListOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
+		// Epic branches are protected
+		Protected: github.Bool(true),
 	}
 
 	for {
