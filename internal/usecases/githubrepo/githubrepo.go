@@ -22,6 +22,9 @@ type GitHubWebApis interface {
 	ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error)
 	ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error)
 	CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, workflowID int64, clientPayload map[string]interface{}) error
+	DeleteBranch(ctx context.Context, owner string, repo string, branchName string) error
+	ClosePullRequest(ctx context.Context, owner string, repo string, prNumber int, comment string) error
+	ListOpenPullRequestsByBase(ctx context.Context, owner string, repo string, baseBranch string) ([]*github.PullRequest, error)
 }
 
 type GithubRepo struct {
@@ -319,4 +322,98 @@ func (g GithubRepo) CreateWorkflowDispatchEventByID(ctx context.Context, owner s
 	g.l.Info("Dispatched event to %s", repo)
 
 	return nil
+}
+
+// ListEpicBranches returns all branches matching epic-* pattern (case insensitive)
+func (g GithubRepo) ListEpicBranches(ctx context.Context, owner string, repo string) ([]string, error) {
+	var epicBranches []string
+	opts := &github.BranchListOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+
+	for {
+		branches, resp, err := g.client.Repositories.ListBranches(ctx, owner, repo, opts)
+		if err != nil {
+			g.l.Error("Error listing branches for %s: %v", repo, err)
+			return nil, fmt.Errorf("error listing branches for %s: %v", repo, err)
+		}
+
+		for _, branch := range branches {
+			branchName := branch.GetName()
+			if strings.HasPrefix(strings.ToLower(branchName), "epic-") {
+				epicBranches = append(epicBranches, branchName)
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return epicBranches, nil
+}
+
+func (g GithubRepo) DeleteBranch(ctx context.Context, owner string, repo string, branchName string) error {
+	_, err := g.client.Git.DeleteRef(ctx, owner, repo, "refs/heads/"+branchName)
+	if err != nil {
+		g.l.Error("Error deleting branch %s in repo %s: %v", branchName, repo, err)
+		return fmt.Errorf("error deleting branch %s in repo %s: %v", branchName, repo, err)
+	}
+	g.l.Info("Deleted branch %s in repo %s", branchName, repo)
+	return nil
+}
+
+func (g GithubRepo) ClosePullRequest(ctx context.Context, owner string, repo string, prNumber int, comment string) error {
+	// Add comment
+	if comment != "" {
+		comment := &github.IssueComment{
+			Body: github.String(comment),
+		}
+		_, _, err := g.client.Issues.CreateComment(ctx, owner, repo, prNumber, comment)
+		if err != nil {
+			g.l.Error("Error adding comment to PR %d in repo %s: %v", prNumber, repo, err)
+			// Continue to close PR even if comment fails
+		}
+	}
+
+	// Close PR
+	state := "closed"
+	prUpdate := &github.PullRequest{
+		State: &state,
+	}
+	_, _, err := g.client.PullRequests.Edit(ctx, owner, repo, prNumber, prUpdate)
+	if err != nil {
+		g.l.Error("Error closing PR %d in repo %s: %v", prNumber, repo, err)
+		return fmt.Errorf("error closing PR %d in repo %s: %v", prNumber, repo, err)
+	}
+	g.l.Info("Closed PR %d in repo %s", prNumber, repo)
+	return nil
+}
+
+func (g GithubRepo) ListOpenPullRequestsByBase(ctx context.Context, owner string, repo string, baseBranch string) ([]*github.PullRequest, error) {
+	opts := &github.PullRequestListOptions{
+		Base:  baseBranch,
+		State: "open",
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+
+	var allPRs []*github.PullRequest
+	for {
+		prs, resp, err := g.client.PullRequests.List(ctx, owner, repo, opts)
+		if err != nil {
+			g.l.Error("Error listing PRs for repo %s base %s: %v", repo, baseBranch, err)
+			return nil, fmt.Errorf("error listing PRs: %v", err)
+		}
+		allPRs = append(allPRs, prs...)
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	return allPRs, nil
 }
