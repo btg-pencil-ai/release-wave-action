@@ -21,8 +21,8 @@ type ActiveEpicsResponse struct {
 // FetchHydraActiveEpics calls the Hydra webhook endpoint to get active epic names
 func FetchHydraActiveEpics(l utils.LogInterface, hydraWebhookURL, hydraWebhookSecret string) ([]string, error) {
 	if hydraWebhookURL == "" {
-		l.Info("Hydra webhook URL not configured, skipping active epics fetch")
-		return nil, nil
+		l.Error("Hydra webhook URL not configured")
+		return nil, fmt.Errorf("hydra webhook URL not configured")
 	}
 	body := []byte("{}")
 

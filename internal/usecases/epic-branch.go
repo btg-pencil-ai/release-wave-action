@@ -100,7 +100,7 @@ func FindEpicBranchesInRepos(ctx context.Context, l utils.LogInterface, githubRe
 			if match.Found {
 				l.Info("Found %d matching branch(es) %v for epic '%s' in repo '%s'", len(matchedBranches), matchedBranches, epic, repo)
 			} else {
-				l.Debug("No matching branch for epic '%s' in repo '%s'", epic, repo)
+				l.Info("No matching branch for epic '%s' in repo '%s'", epic, repo)
 			}
 		}
 
@@ -246,4 +246,55 @@ func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRe
 	}
 
 	return results, nil
+}
+
+// CleanupOldSyncBranches checks for open PRs targeting the epic branches and closes them if they are from old sync branches and deletes the sync branch
+func CleanupOldSyncBranches(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, owner string, releaseVersion string, epicBranchResults map[string][]EpicBranchMatch) error {
+	for repo, matches := range epicBranchResults {
+		for _, match := range matches {
+			if !match.Found {
+				continue
+			}
+
+			// Regex to match sync branches for THIS specific epic: sync/{any-version}-{epic-name}
+			// We use QuoteMeta to ensure the epic name is treated as a literal string
+			patternStr := fmt.Sprintf(`^sync/v\d+\.\d+\.\d+-%s$`, regexp.QuoteMeta(match.Epic))
+			syncBranchPattern, err := regexp.Compile(patternStr)
+			if err != nil {
+				l.Error("Error compiling regex for epic '%s': %v", match.Epic, err)
+				return fmt.Errorf("error compiling regex for epic '%s': %v", match.Epic, err)
+			}
+
+			for _, epicBranch := range match.BranchNames {
+				l.Info("Checking for old sync PRs targeting '%s' in repo '%s' for epic '%s'", epicBranch, repo, match.Epic)
+
+				prs, err := githubRepo.ListOpenPullRequestsByBase(ctx, owner, repo, epicBranch)
+				if err != nil {
+					l.Error("Error listing PRs for repo %s base %s: %v", repo, epicBranch, err)
+					return fmt.Errorf("error listing PRs for repo %s base %s: %v", repo, epicBranch, err)
+				}
+
+				for _, pr := range prs {
+					headBranch := pr.Head.GetRef()
+					if syncBranchPattern.MatchString(headBranch) {
+						l.Info("Found old sync PR #%d from branch '%s' targeting '%s'", pr.GetNumber(), headBranch, epicBranch)
+
+						// Close PR
+						comment := "Closing old sync PR as a new sync process is starting for release " + releaseVersion + "."
+						if err := githubRepo.ClosePullRequest(ctx, owner, repo, pr.GetNumber(), comment); err != nil {
+							l.Error("Failed to close PR #%d: %v", pr.GetNumber(), err)
+							return fmt.Errorf("failed to close PR #%d: %v", pr.GetNumber(), err)
+						}
+
+						// Delete branch
+						if err := githubRepo.DeleteBranch(ctx, owner, repo, headBranch); err != nil {
+							l.Error("Failed to delete branch '%s': %v", headBranch, err)
+							return fmt.Errorf("failed to delete branch '%s': %v", headBranch, err)
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

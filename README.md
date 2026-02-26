@@ -20,6 +20,9 @@ This is a custom GitHub action written in Go to automate release candidate branc
 | `installation_id`   | The GitHub App installation ID.                          |                             | false    |
 | `exclude_repos`      | A comma-separated list of repositories to exclude.      |                             | false    |
 | `environment` |  Porduction environment | | false |
+| `enable_main_to_epic_sync` | Enable sync from main to epic branches | `false` | false |
+| `hydra_webhook_url` | The URL for the Hydra webhook | | false |
+| `hydra_webhook_secret` | The secret for the Hydra webhook | | false |
 
 ## 📤 Outputs
 
