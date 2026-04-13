@@ -52,6 +52,16 @@ inputs:
     required: false
   exclude_prod_release_repositories:
     description: 'A list of repositories to exclude for Production-Release'
+  enable_main_to_epic_sync:
+    description: 'Enable sync from main to epic branches'
+    required: false
+    default: 'false'
+  hydra_webhook_url:
+    description: 'The URL for the Hydra webhook'
+    required: false
+  hydra_webhook_secret:
+    description: 'The secret for the Hydra webhook'
+    required: false
   
 outputs:
   slack_payload:

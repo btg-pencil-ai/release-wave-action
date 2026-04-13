@@ -22,6 +22,9 @@ type Config struct {
 	ExcludeRepositories            string
 	ExcludeProdReleaseRepositories string
 	RCBranch                       string
+	HydraWebhookURL                string
+	HydraWebhookSecret             string
+	EnableMainToEpicSync           bool
 }
 
 func Variables() (*Config, error) {
@@ -87,6 +90,14 @@ func Variables() (*Config, error) {
 	includeRepositories := githubactions.GetInput("include_repositories")
 	excludeProdReleaseRepostories := githubactions.GetInput("exclude_prod_release_repositories")
 
+	enableMainToEpicSyncString := githubactions.GetInput("enable_main_to_epic_sync")
+	enableMainToEpicSyncBool := (enableMainToEpicSyncString == "true")
+
+    hydraWebhookURL := githubactions.GetInput("hydra_webhook_url")
+	hydraWebhookSecret := githubactions.GetInput("hydra_webhook_secret")
+	if hydraWebhookSecret != "" {
+		githubactions.AddMask(hydraWebhookSecret)
+	}
 	return &Config{
 		LogLevel:                       logLevel,
 		UseCase:                        usecase,
@@ -104,5 +115,8 @@ func Variables() (*Config, error) {
 		IncludeRepositories:            includeRepositories,
 		ExcludeRepositories:            excludeRepositories,
 		ExcludeProdReleaseRepositories: excludeProdReleaseRepostories,
+		HydraWebhookURL:                hydraWebhookURL,
+		HydraWebhookSecret:             hydraWebhookSecret,
+		EnableMainToEpicSync:			enableMainToEpicSyncBool,
 	}, nil
 }
