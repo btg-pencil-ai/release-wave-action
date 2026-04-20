@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"release-candidate/internal/utils"
 )
@@ -30,7 +31,10 @@ func FetchHydraActiveEpics(l utils.LogInterface, hydraWebhookURL, hydraWebhookSe
 	signature := computeHMACSHA256(body, hydraWebhookSecret)
 	signatureHeader := fmt.Sprintf("sha256=%s", signature)
 
-	req, err := http.NewRequest(http.MethodPost, hydraWebhookURL, bytes.NewReader(body))
+	// Safely join the base URL with the endpoint path
+	getActiveEpicsEndpoint := strings.TrimRight(hydraWebhookURL, "/") + "/epics/hydra-active"
+
+	req, err := http.NewRequest(http.MethodPost, getActiveEpicsEndpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
