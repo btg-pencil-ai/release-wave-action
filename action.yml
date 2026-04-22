@@ -66,6 +66,8 @@ inputs:
 outputs:
   slack_payload:
     description: 'The Slack payload'
+  sync_pr_slack_payload:
+    description: 'The Slack payload for Main to Epic Sync'
 
 runs:
   using: docker

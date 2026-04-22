@@ -150,3 +150,44 @@ func ProductionWorkflowDispatchSlackPayloadBuilder(rcVersion string, repoList []
 
 	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
 }
+
+func MainToEpicSyncSlackPayloadBuilder(rcVersion string, prResultsByEpic map[string][]map[string]interface{}) (string, error) {
+	var detailsTextSectionList []interface{}
+
+	for epic, prs := range prResultsByEpic {
+		var details strings.Builder
+		details.WriteString(fmt.Sprintf("*Epic: %s*\n", epic))
+		for _, pr := range prs {
+			repo := pr["repo"].(string)
+			if prUrl, ok := pr["url"].(string); ok && prUrl != "" {
+				hasConflicts, _ := pr["hasConflicts"].(bool)
+				if hasConflicts {
+					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:warning: PR-Link (Conflicts)>\n", repo, prUrl))
+				} else {
+					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:white_check_mark: PR-Link>\n", repo, prUrl))
+				}
+			} else if errStr, ok := pr["error"].(string); ok && errStr != "" {
+				if strings.Contains(errStr, "No commits between") {
+					details.WriteString(fmt.Sprintf("• *`%s`:* :white_circle: Up to date (No changes)\n", repo))
+				} else {
+					details.WriteString(fmt.Sprintf("• *`%s`:* :x: Failed - %s\n", repo, errStr))
+				}
+			} else {
+				details.WriteString(fmt.Sprintf("• *`%s`:* :white_circle: Skipped or No Changes\n", repo))
+			}
+		}
+
+		detailsTextSectionList = append(detailsTextSectionList, map[string]interface{}{
+			"type": "section",
+			"text": map[string]string{
+				"type": "mrkdwn",
+				"text": details.String(),
+			},
+		})
+	}
+
+	headerText := fmt.Sprintf("🔄 Main to Epic Sync - %s", rcVersion)
+	sectionText := "The following sync PRs have been processed for active epics: 📋"
+
+	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
+}

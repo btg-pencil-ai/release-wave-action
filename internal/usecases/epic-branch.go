@@ -186,12 +186,14 @@ func CreateSyncBranchesForEpics(ctx context.Context, l utils.LogInterface, githu
 
 // SyncToEpicPRResult represents the result of creating a PR from sync branch to epic branch
 type SyncToEpicPRResult struct {
-	Repo       string
-	SyncBranch string
-	EpicBranch string
-	PRURL      string
-	Created    bool
-	Error      string
+	Repo         string
+	Epic         string
+	SyncBranch   string
+	EpicBranch   string
+	PRURL        string
+	Created      bool
+	HasConflicts bool
+	Error        string
 }
 
 // CreatePRsFromSyncToEpic creates PRs from sync branches to their corresponding epic branches
@@ -213,12 +215,14 @@ func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRe
 
 			l.Info("Creating PR from '%s' to '%s' in repo '%s'", syncResult.BranchName, epicBranch, syncResult.Repo)
 
-			prURL, prError, err := githubRepo.CreatePullRequest(ctx, owner, syncResult.Repo, syncResult.BranchName, epicBranch, prTitle, prBody)
+			prURL, prError, hasConflicts, err := githubRepo.CreatePullRequest(ctx, owner, syncResult.Repo, syncResult.BranchName, epicBranch, prTitle, prBody)
 
 			result := SyncToEpicPRResult{
-				Repo:       syncResult.Repo,
-				SyncBranch: syncResult.BranchName,
-				EpicBranch: epicBranch,
+				Repo:         syncResult.Repo,
+				Epic:         syncResult.Epic,
+				SyncBranch:   syncResult.BranchName,
+				EpicBranch:   epicBranch,
+				HasConflicts: hasConflicts,
 			}
 
 			if err != nil {

@@ -15,7 +15,7 @@ import (
 
 type GitHubWebApis interface {
 	CreateBranch(ctx context.Context, owner string, repo string, baseBranch string, newBranch string) error
-	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, err error)
+	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error)
 	MergeBranchWithConflictPr(ctx context.Context, owner string, repo string, baseBranch string, mergeBranch string) (mergeConflictPr string, err error)
 	ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error)
 	CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error
@@ -87,7 +87,7 @@ func (g GithubRepo) MergeBranchWithConflictPr(ctx context.Context, owner string,
 		// Handle 409 conflict (merge conflict) - don't retry, handle immediately
 		if res != nil && res.StatusCode == 409 {
 			g.l.Error("Merge conflict: %v", err)
-			prURL, _, err := g.CreatePullRequest(ctx, owner, repo, baseBranch, mergeBranch, "Merge conflict to "+mergeBranch, "Merge conflict to "+mergeBranch)
+			prURL, _, _, err := g.CreatePullRequest(ctx, owner, repo, baseBranch, mergeBranch, "Merge conflict to "+mergeBranch, "Merge conflict to "+mergeBranch)
 			if err != nil {
 				g.l.Error("Error creating merge PR: %v", err)
 				return "", fmt.Errorf("error creating merge PR: %v", err)
@@ -116,7 +116,7 @@ func (g GithubRepo) MergeBranchWithConflictPr(ctx context.Context, owner string,
 	return "", fmt.Errorf("error merging branch: max retries exceeded")
 }
 
-func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, err error) {
+func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error) {
 	prInfo := &github.NewPullRequest{
 		Title: github.String(title),
 		Body:  github.String(body),
@@ -126,38 +126,69 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 	pr, resp, err := g.client.PullRequests.Create(ctx, owner, repo, prInfo)
 	if err != nil {
 		if resp != nil && resp.StatusCode == 422 {
-			body, _ := io.ReadAll(resp.Body)
+			bodyBytes, _ := io.ReadAll(resp.Body)
 			var responseBody map[string]interface{}
-			if err := json.Unmarshal(body, &responseBody); err != nil {
+			if err := json.Unmarshal(bodyBytes, &responseBody); err != nil {
 				g.l.Error("Error unmarshalling response body: %v", err)
-				return "", "", fmt.Errorf("error unmarshalling response body: %v", err)
+				return "", "", false, fmt.Errorf("error unmarshalling response body: %v", err)
 			}
 			if errors, ok := responseBody["errors"].([]interface{}); ok && len(errors) > 0 {
 				if message, ok := errors[0].(map[string]interface{})["message"].(string); ok {
 					g.l.Error("Response message: %s", message)
 					prError = message
 				} else {
-					g.l.Error("Response body: %s", body)
+					g.l.Error("Response body: %s", string(bodyBytes))
 				}
 			} else {
-				g.l.Error("Response body: %s", body)
+				g.l.Error("Response body: %s", string(bodyBytes))
 			}
 		} else {
 			g.l.Error("Error creating PR: %v", err)
-			return "", "", fmt.Errorf("error %s creating PR: %v", resp.Status, err)
+			return "", "", false, fmt.Errorf("error %s creating PR: %v", resp.Status, err)
 		}
 	} else {
 		g.l.Info("Created PR for branch %s on Repo %s", toBranch, repo)
 	}
 
-	prUrl = pr.GetHTMLURL()
+	if pr != nil {
+		prUrl = pr.GetHTMLURL()
+		
+		// Poll to check for merge conflicts.
+		// GitHub calculates PR mergeability asynchronously in the background.
+		// When a PR is first created, prCheck.Mergeable is often nil while GitHub computes it.
+		// This loop polls the API until Mergeable is no longer nil (meaning the calculation is done),
+		// or until maxRetries is reached.
+		maxRetries := 5
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			time.Sleep(2 * time.Second) // Wait for GitHub to calculate mergeability
+			
+			prCheck, _, checkErr := g.client.PullRequests.Get(ctx, owner, repo, pr.GetNumber())
+			if checkErr != nil {
+				g.l.Error("Error checking PR mergeability: %v", checkErr)
+				break
+			}
+			
+			if prCheck.Mergeable != nil {
+				hasConflicts = !*prCheck.Mergeable
+				if hasConflicts {
+					g.l.Warn("PR %d has merge conflicts", pr.GetNumber())
+				}
+				break
+			}
+			
+			if attempt == maxRetries {
+				g.l.Warn("Could not determine mergeability for PR %d after %d attempts", pr.GetNumber(), maxRetries)
+			}
+		}
+	}
+
 	if prUrl == "" {
 		prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 			Head: owner + ":" + fromBranch,
 		})
 		if err != nil {
 			g.l.Error("Error getting PR: %v", err)
-			return "", "", fmt.Errorf("error getting PR: %v", err)
+			return "", "", false, fmt.Errorf("error getting PR: %v", err)
 		}
 		if len(prs) > 0 {
 			prUrl = prs[0].GetHTMLURL()
@@ -165,7 +196,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 		print(prUrl)
 	}
 	g.l.Info("PR URL: %s", prUrl)
-	return prUrl, prError, nil
+	return prUrl, prError, hasConflicts, nil
 }
 
 func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase string, includeRepositories string, excludeRepositories string, excludeProdReleaseRepostories string) ([]string, error) {
@@ -247,17 +278,17 @@ func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo str
 	response := make([]map[string]interface{}, 0, len(prs))
 	for _, pr := range prs {
 		if pr.Head.Ref != nil {
-			prHeadBranch:= *pr.Head.Ref
+			prHeadBranch := *pr.Head.Ref
 			if prHeadBranch == fromBranch {
-				g.l.Info("Listing pr from current rc branch: %v",prHeadBranch)
+				g.l.Info("Listing pr from current rc branch: %v", prHeadBranch)
 				response = append(response, map[string]interface{}{
 					"url":        pr.GetHTMLURL(),
 					"id":         pr.GetID(),
 					"repository": repo,
 					"state":      pr.GetState(),
 				})
-			} else{
-				g.l.Info("skipping pr from non current rc branch %v",prHeadBranch)
+			} else {
+				g.l.Info("skipping pr from non current rc branch %v", prHeadBranch)
 			}
 
 		} else {
