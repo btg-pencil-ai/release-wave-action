@@ -41,7 +41,7 @@ func ReleasePrCreator(ctx context.Context, l utils.LogInterface, githubRepo gith
 				return nil, nil, fmt.Errorf("error merging branch for repo %s: %v", repo, err)
 			}
 
-			prUrl, prError, err = githubRepo.CreatePullRequest(ctx, variables.Owner, repo, variables.RCBranch, variables.ProductionBranch, variables.PRTitle, variables.PRBody)
+			prUrl, prError, _, err = githubRepo.CreatePullRequest(ctx, variables.Owner, repo, variables.RCBranch, variables.ProductionBranch, variables.PRTitle, variables.PRBody)
 			if err != nil {
 				l.Error("Error creating PR for repo %s: %v", repo, err)
 				return nil, nil, fmt.Errorf("error creating PR for repo %s: %v", repo, err)

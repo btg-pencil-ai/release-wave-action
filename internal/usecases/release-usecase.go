@@ -55,22 +55,22 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 		l.Fatal("Error listing repositories: %v", err)
 	}
 	l.Info("repoList: %v", repoList)
-	var slackPayload string
-
-	activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
-	if err != nil {
-		slackPayload, err = utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
-		if err != nil {
-			l.Fatal("Error building slack payload: %v", err)
-		}
-	} else {
-		l.Info("Staring Production Pipeline Dispatch")
-		slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
-		if err != nil {
-			l.Fatal("Error building slack payload: %v", err)
-		}
-	}
-	safeSetOutput("slack_payload", slackPayload, l)
+	// var slackPayload string
+	//
+	// activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
+	// if err != nil {
+	// slackPayload, err = utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
+	// if err != nil {
+	// l.Fatal("Error building slack payload: %v", err)
+	// }
+	// } else {
+	// l.Info("Staring Production Pipeline Dispatch")
+	// slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
+	// if err != nil {
+	// l.Fatal("Error building slack payload: %v", err)
+	// }
+	// }
+	// safeSetOutput("slack_payload", slackPayload, l)
 
 	if cfg.EnableMainToEpicSync {
 		MainToEpicSyncUseCase(ctx, l, githubRepo, cfg, repoList)
@@ -89,11 +89,13 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 			l.Fatal("Error listing repositories: %v", err)
 		}
 	}
+	l.Info("repoList: %v", repoList)
 	// Fetch active epics from Hydra webhook
 	activeEpics, err := FetchHydraActiveEpics(l, cfg.HydraWebhookURL, cfg.HydraWebhookSecret)
 	if err != nil {
 		l.Fatal("Error fetching active epics: %v", err)
 	}
+	l.Info("activeEpics: %v", activeEpics)
 
 	if len(activeEpics) > 0 {
 		l.Info("Active epics: %v", activeEpics)
@@ -140,11 +142,30 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 		prResults, err := CreatePRsFromSyncToEpic(ctx, l, githubRepo, cfg.Owner, cfg.RCVersion, syncResults)
 
 		// Log PR creation results
+		prResultsByEpic := make(map[string][]map[string]interface{})
 		for _, result := range prResults {
 			if result.Created {
 				l.Info("PR created: %s -> %s in repo '%s': %s", result.SyncBranch, result.EpicBranch, result.Repo, result.PRURL)
 			} else {
 				l.Error("Failed to create PR: %s -> %s in repo '%s': %s", result.SyncBranch, result.EpicBranch, result.Repo, result.Error)
+			}
+
+			prMap := map[string]interface{}{
+				"repo":         result.Repo,
+				"url":          result.PRURL,
+				"error":        result.Error,
+				"hasConflicts": result.HasConflicts,
+			}
+			prResultsByEpic[result.Epic] = append(prResultsByEpic[result.Epic], prMap)
+		}
+
+		if len(prResultsByEpic) > 0 {
+			slackPayload, err := utils.MainToEpicSyncSlackPayloadBuilder(cfg.RCVersion, prResultsByEpic)
+			if err != nil {
+				l.Error("Error building sync slack payload: %v", err)
+			} else {
+				l.Info("Sync PR Slack Payload:\n%s", slackPayload) // Temporary log for copying
+				safeSetOutput("sync_pr_slack_payload", slackPayload, l)
 			}
 		}
 
