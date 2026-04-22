@@ -153,7 +153,11 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 	if pr != nil {
 		prUrl = pr.GetHTMLURL()
 		
-		// Poll to check for merge conflicts
+		// Poll to check for merge conflicts.
+		// GitHub calculates PR mergeability asynchronously in the background.
+		// When a PR is first created, prCheck.Mergeable is often nil while GitHub computes it.
+		// This loop polls the API until Mergeable is no longer nil (meaning the calculation is done),
+		// or until maxRetries is reached.
 		maxRetries := 5
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			time.Sleep(2 * time.Second) // Wait for GitHub to calculate mergeability

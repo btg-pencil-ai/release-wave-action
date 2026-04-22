@@ -55,22 +55,22 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 		l.Fatal("Error listing repositories: %v", err)
 	}
 	l.Info("repoList: %v", repoList)
-	// var slackPayload string
-	//
-	// activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
-	// if err != nil {
-	// slackPayload, err = utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
-	// if err != nil {
-	// l.Fatal("Error building slack payload: %v", err)
-	// }
-	// } else {
-	// l.Info("Staring Production Pipeline Dispatch")
-	// slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
-	// if err != nil {
-	// l.Fatal("Error building slack payload: %v", err)
-	// }
-	// }
-	// safeSetOutput("slack_payload", slackPayload, l)
+	var slackPayload string
+	
+	activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
+	if err != nil {
+	slackPayload, err = utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
+	if err != nil {
+	l.Fatal("Error building slack payload: %v", err)
+	}
+	} else {
+	l.Info("Staring Production Pipeline Dispatch")
+	slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
+	if err != nil {
+	l.Fatal("Error building slack payload: %v", err)
+	}
+	}
+	safeSetOutput("slack_payload", slackPayload, l)
 
 	if cfg.EnableMainToEpicSync {
 		MainToEpicSyncUseCase(ctx, l, githubRepo, cfg, repoList)
@@ -164,7 +164,7 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 			if err != nil {
 				l.Error("Error building sync slack payload: %v", err)
 			} else {
-				l.Info("Sync PR Slack Payload:\n%s", slackPayload) // Temporary log for copying
+				l.Info("Sync PR Slack Payload:\n%s", slackPayload) //Log for manual copying
 				safeSetOutput("sync_pr_slack_payload", slackPayload, l)
 			}
 		}
