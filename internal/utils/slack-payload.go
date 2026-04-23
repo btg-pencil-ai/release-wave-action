@@ -187,7 +187,7 @@ func MainToEpicSyncSlackPayloadBuilder(rcVersion string, prResultsByEpic map[str
 	}
 
 	headerText := fmt.Sprintf("🔄 Main to Epic Sync - %s", rcVersion)
-	sectionText := "The following sync PRs have been processed for active epics: 📋"
+	sectionText := "The following sync PRs have been processed for active epics & will be auto merged at 8 PM IST: 📋"
 
 	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
 }
