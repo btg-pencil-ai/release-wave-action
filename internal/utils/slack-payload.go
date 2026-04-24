@@ -167,13 +167,9 @@ func MainToEpicSyncSlackPayloadBuilder(rcVersion string, prResultsByEpic map[str
 					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:white_check_mark: PR-Link>\n", repo, prUrl))
 				}
 			} else if errStr, ok := pr["error"].(string); ok && errStr != "" {
-				if strings.Contains(errStr, "No commits between") {
-					details.WriteString(fmt.Sprintf("• *`%s`:* :white_circle: Up to date (No changes)\n", repo))
-				} else {
+				if !strings.Contains(errStr, "No commits between") {
 					details.WriteString(fmt.Sprintf("• *`%s`:* :x: Failed - %s\n", repo, errStr))
 				}
-			} else {
-				details.WriteString(fmt.Sprintf("• *`%s`:* :white_circle: Skipped or No Changes\n", repo))
 			}
 		}
 
