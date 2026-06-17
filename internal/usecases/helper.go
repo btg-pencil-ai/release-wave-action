@@ -62,22 +62,6 @@ func ReleasePrCreator(ctx context.Context, l utils.LogInterface, githubRepo gith
 	return prList, prUrls, nil
 }
 
-func PreReleaseCheck(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, variables *configs.Config, repoList []string) (activePrs []map[string]interface{}, err error) {
-	for _, repo := range repoList {
-		prs, err := githubRepo.ListPullRequests(ctx, variables.Owner, repo, variables.RCBranch, variables.ProductionBranch, "open")
-		if err != nil {
-			l.Error("Error listing PRs for repo %s: %v", repo, err)
-			return nil, fmt.Errorf("error listing PRs for repo %s: %v", repo, err)
-		}
-		activePrs = append(activePrs, prs...)
-	}
-	if len(activePrs) > 0 {
-		l.Error("There are active PRs: %v", activePrs)
-		return activePrs, fmt.Errorf("there are active PRs: %v", activePrs)
-	}
-	return activePrs, nil
-}
-
 func ProductionWorkflowDispatch(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, variables *configs.Config, repoList []string) (slackpayload string, err error) {
 	payload := map[string]interface{}{
 		"environment":     variables.Environment,

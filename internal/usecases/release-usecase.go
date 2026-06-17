@@ -56,19 +56,14 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 	}
 	l.Info("repoList: %v", repoList)
 	var slackPayload string
-	
-	activePrs, err := PreReleaseCheck(ctx, l, githubRepo, cfg, repoList)
-	if err != nil {
-	slackPayload, err = utils.PreReleaseErrorSlackPayloadBuilder(cfg.RCVersion, activePrs)
-	if err != nil {
-	l.Fatal("Error building slack payload: %v", err)
-	}
-	} else {
-	l.Info("Staring Production Pipeline Dispatch")
+
+	// Pre-release check removed: the Hydra platform now ensures all RC -> production
+	// PRs are merged before this use case runs, so checking for open PRs here is
+	// redundant. Proceed directly to dispatching the production pipeline.
+	l.Info("Starting Production Pipeline Dispatch")
 	slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
 	if err != nil {
-	l.Fatal("Error building slack payload: %v", err)
-	}
+		l.Fatal("Error building slack payload: %v", err)
 	}
 	safeSetOutput("slack_payload", slackPayload, l)
 
