@@ -112,23 +112,6 @@ func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]i
 	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
 }
 
-func PreReleaseErrorSlackPayloadBuilder(rcVersion string, activePrs []map[string]interface{}) (string, error) {
-	formatFunc := func(pr map[string]interface{}) string {
-		return fmt.Sprintf(
-			"• *`%s`:  * <%s|:warning: PR-Link> -> *%s* \n",
-			pr["repository"], pr["url"], pr["state"],
-		)
-	}
-
-	sections := buildSections(activePrs, formatFunc)
-	detailsTextSectionList := buildDetailsTextSectionList(sections)
-
-	headerText := fmt.Sprintf("🚨 Pre-Release Check Failure - %s", rcVersion)
-	sectionText := "There are active PRs that need to be closed or merged before the release. Please review the list below: 📋"
-
-	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
-}
-
 func ProductionWorkflowDispatchSlackPayloadBuilder(rcVersion string, repoList []string, environment string) (string, error) {
 	formatFunc := func(repo map[string]interface{}) string {
 		return fmt.Sprintf(
