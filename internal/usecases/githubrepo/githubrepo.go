@@ -292,8 +292,16 @@ func (g GithubRepo) ListEpicBranches(ctx context.Context, owner string, repo str
 }
 
 func (g GithubRepo) DeleteBranch(ctx context.Context, owner string, repo string, branchName string) error {
-	_, err := g.client.Git.DeleteRef(ctx, owner, repo, "refs/heads/"+branchName)
+	resp, err := g.client.Git.DeleteRef(ctx, owner, repo, "refs/heads/"+branchName)
 	if err != nil {
+		// The branch may already be gone - GitHub can auto-delete the head branch
+		// when its PR is closed/merged, or a previous run already removed it. In
+		// that case DeleteRef returns 422 "Reference does not exist" (sometimes
+		// 404). Treat it as a successful no-op so cleanup stays idempotent.
+		if resp != nil && (resp.StatusCode == 422 || resp.StatusCode == 404) {
+			g.l.Info("Branch %s in repo %s already gone (HTTP %d: %v) - likely auto-deleted with its PR; skipping intentionally", branchName, repo, resp.StatusCode, err)
+			return nil
+		}
 		g.l.Error("Error deleting branch %s in repo %s: %v", branchName, repo, err)
 		return fmt.Errorf("error deleting branch %s in repo %s: %v", branchName, repo, err)
 	}
