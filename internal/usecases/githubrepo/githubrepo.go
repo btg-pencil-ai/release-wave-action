@@ -16,10 +16,8 @@ import (
 type GitHubWebApis interface {
 	CreateBranch(ctx context.Context, owner string, repo string, baseBranch string, newBranch string) error
 	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error)
-	MergeBranchWithConflictPr(ctx context.Context, owner string, repo string, baseBranch string, mergeBranch string) (mergeConflictPr string, err error)
 	ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error)
 	CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error
-	ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error)
 	ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error)
 	CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, workflowID int64, clientPayload map[string]interface{}) error
 	ListEpicBranches(ctx context.Context, owner string, repo string) ([]string, error)
@@ -61,59 +59,6 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 		}
 	}
 	return nil
-}
-
-func (g GithubRepo) MergeBranchWithConflictPr(ctx context.Context, owner string, repo string, baseBranch string, mergeBranch string) (mergeConflictPr string, err error) {
-	maxRetries := 5
-	retryDelay := 5 * time.Second
-	initialWait := 1 * time.Second
-
-	// Wait 1 second before the first merge attempt
-	time.Sleep(initialWait)
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		_, res, err := g.client.Repositories.Merge(ctx, owner, repo, &github.RepositoryMergeRequest{
-			Base:          github.String(mergeBranch),
-			Head:          github.String(baseBranch),
-			CommitMessage: github.String(fmt.Sprintf("Merge branch '%s' into '%s' on %s", mergeBranch, baseBranch, repo)),
-		})
-
-		if err == nil {
-			// Merge successful
-			g.l.Info("Merged branch %s into %s on %s", baseBranch, mergeBranch, repo)
-			return "", nil
-		}
-
-		// Handle 409 conflict (merge conflict) - don't retry, handle immediately
-		if res != nil && res.StatusCode == 409 {
-			g.l.Error("Merge conflict: %v", err)
-			prURL, _, _, err := g.CreatePullRequest(ctx, owner, repo, baseBranch, mergeBranch, "Merge conflict to "+mergeBranch, "Merge conflict to "+mergeBranch)
-			if err != nil {
-				g.l.Error("Error creating merge PR: %v", err)
-				return "", fmt.Errorf("error creating merge PR: %v", err)
-			}
-			return prURL, nil
-		}
-
-		// Handle 404 error - retry with delay
-		if res != nil && res.StatusCode == 404 {
-			if attempt < maxRetries {
-				g.l.Warn("Merge failed with 404 error (attempt %d/%d), retrying after %v: %v", attempt, maxRetries, retryDelay, err)
-				time.Sleep(retryDelay)
-				continue
-			} else {
-				g.l.Error("Merge failed with 404 error after %d attempts: %v", maxRetries, err)
-				return "", fmt.Errorf("error merging branch after %d retries: %v", maxRetries, err)
-			}
-		}
-
-		// Other errors - return immediately without retry
-		g.l.Error("Error merging branch: %v", err)
-		return "", fmt.Errorf("error merging branch: %v", err)
-	}
-
-	// Should not reach here, but handle just in case
-	return "", fmt.Errorf("error merging branch: max retries exceeded")
 }
 
 func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error) {
@@ -261,48 +206,6 @@ func (g GithubRepo) CreateRepositoryDispatches(ctx context.Context, owner string
 	g.l.Info("Dispatched event %s to %s", eventType, repo)
 
 	return nil
-}
-
-func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error) {
-	prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
-		Base:  toBranch,
-		Head:  owner + "/" + fromBranch,
-		State: state,
-	})
-
-	if err != nil {
-		g.l.Error("Error listing PRs: %v", err)
-		return nil, fmt.Errorf("error listing PRs: %v", err)
-	}
-
-	response := make([]map[string]interface{}, 0, len(prs))
-	for _, pr := range prs {
-		if pr.Head.Ref != nil {
-			prHeadBranch := *pr.Head.Ref
-			if prHeadBranch == fromBranch {
-				g.l.Info("Listing pr from current rc branch: %v", prHeadBranch)
-				response = append(response, map[string]interface{}{
-					"url":        pr.GetHTMLURL(),
-					"id":         pr.GetID(),
-					"repository": repo,
-					"state":      pr.GetState(),
-				})
-			} else {
-				g.l.Info("skipping pr from non current rc branch %v", prHeadBranch)
-			}
-
-		} else {
-			g.l.Info("Listing pr as Head info can't be obtained")
-			response = append(response, map[string]interface{}{
-				"url":        pr.GetHTMLURL(),
-				"id":         pr.GetID(),
-				"repository": repo,
-				"state":      pr.GetState(),
-			})
-		}
-	}
-
-	return response, nil
 }
 
 func (g GithubRepo) ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error) {

@@ -15,9 +15,6 @@ type Config struct {
 	PrivateKey                     string
 	RCVersion                      string
 	ProductionBranch               string
-	DevelopmentBranch              string
-	PRTitle                        string
-	PRBody                         string
 	IncludeRepositories            string
 	ExcludeRepositories            string
 	ExcludeProdReleaseRepositories string
@@ -70,21 +67,8 @@ func Variables() (*Config, error) {
 		githubactions.Fatalf("production_branch is required")
 	}
 
-	developmentBranch := githubactions.GetInput("development_branch")
-	if developmentBranch == "" {
-		githubactions.Fatalf("development_branch is required")
-	}
-
 	usecase := githubactions.GetInput("use_case")
 	environment := githubactions.GetInput("environment")
-	prTitle := githubactions.GetInput("pr_title")
-	if prTitle == "" {
-		prTitle = "Release"
-	}
-	prBody := githubactions.GetInput("pr_body")
-	if prBody == "" {
-		prBody = "Release"
-	}
 
 	excludeRepositories := githubactions.GetInput("exclude_repositories")
 	includeRepositories := githubactions.GetInput("include_repositories")
@@ -108,9 +92,6 @@ func Variables() (*Config, error) {
 		InstallationID:                 installationId,
 		RCVersion:                      rcVersion,
 		ProductionBranch:               productionBranch,
-		DevelopmentBranch:              developmentBranch,
-		PRTitle:                        prTitle,
-		PRBody:                         prBody,
 		Environment:                    environment,
 		IncludeRepositories:            includeRepositories,
 		ExcludeRepositories:            excludeRepositories,

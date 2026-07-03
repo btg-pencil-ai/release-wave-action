@@ -83,35 +83,6 @@ func buildSections(items []map[string]interface{}, formatFunc func(map[string]in
 	return sections
 }
 
-func ReleasePrCreatorSlackPayloadBuilder(rcVersion string, prList []map[string]interface{}) (string, error) {
-	formatFunc := func(pr map[string]interface{}) string {
-		if pr["url"] != "" || pr["conflictMergePr"] != "" {
-			if pr["conflictMergePr"] != "" {
-				return fmt.Sprintf(
-					"• *`%s`:*  <%s|:warning: Resolve Conflict PR> -> :pray:Then rerun the RC-automation \n",
-					pr["repo"], pr["conflictMergePr"],
-				)
-			}
-			return fmt.Sprintf(
-				"• *`%s`:* <%s|:white_check_mark: PR-Link> | %s \n",
-				pr["repo"], pr["url"], pr["error"],
-			)
-		}
-		return fmt.Sprintf(
-			"• *`%s`:* %s  :white_circle:\n",
-			pr["repo"], pr["error"],
-		)
-	}
-
-	sections := buildSections(prList, formatFunc)
-	detailsTextSectionList := buildDetailsTextSectionList(sections)
-
-	headerText := fmt.Sprintf("🚀 Release Candidate Branches for %s", rcVersion)
-	sectionText := "Below is a compact list of RC branch PR details for review. 📋"
-
-	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
-}
-
 func ProductionWorkflowDispatchSlackPayloadBuilder(rcVersion string, repoList []string, environment string) (string, error) {
 	formatFunc := func(repo map[string]interface{}) string {
 		return fmt.Sprintf(
