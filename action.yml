@@ -13,22 +13,10 @@ inputs:
     description: 'The owner of the repository'
     required: true
     default: 'owner'
-  development_branch:
-    description: 'The development branch'
-    required: true
-    default: 'development'
   production_branch:
     description: 'The default branch'
     required: true
     default: 'main'
-  pr_title:
-    description: 'The title of the pull request'
-    required: true
-    default: 'Release Candidate'
-  pr_body:
-    description: 'The body of the pull request'
-    required: true
-    default: 'This is a release candidate'
   github_token:
     description: 'The GitHub token'
     required: false

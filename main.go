@@ -30,9 +30,6 @@ func main() {
 	}
 
 	switch config.UseCase {
-	case "Release-Creation":
-		l.Info("Release-Creation use case")
-		usecases.ReleaseCreationUseCase(context.Background(), l, githubClient, config)
 	case "Production-Release":
 		l.Info("Production-Release use case")
 		usecases.ProductionReleaseUseCase(context.Background(), l, githubClient, config)
