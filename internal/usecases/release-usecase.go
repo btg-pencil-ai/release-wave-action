@@ -31,14 +31,18 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 	l.Info("repoList: %v", repoList)
 	var slackPayload string
 
+	PostReleaseWaveStatus(l, cfg, "workflow_start", "", repoList)
+
 	// Pre-release check removed: the Hydra platform now ensures all RC -> production
 	// PRs are merged before this use case runs, so checking for open PRs here is
 	// redundant. Proceed directly to dispatching the production pipeline.
 	l.Info("Starting Production Pipeline Dispatch")
 	slackPayload, err = ProductionWorkflowDispatch(ctx, l, githubRepo, cfg, repoList)
 	if err != nil {
+		PostReleaseWaveStatus(l, cfg, "workflow_failed", "failure", repoList)
 		l.Fatal("Error building slack payload: %v", err)
 	}
+	PostReleaseWaveStatus(l, cfg, "workflow_completed", "success", repoList)
 	safeSetOutput("slack_payload", slackPayload, l)
 
 	if cfg.EnableMainToEpicSync {
