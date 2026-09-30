@@ -15,11 +15,9 @@ import (
 
 type GitHubWebApis interface {
 	CreateBranch(ctx context.Context, owner string, repo string, baseBranch string, newBranch string) error
-	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, err error)
-	MergeBranchWithConflictPr(ctx context.Context, owner string, repo string, baseBranch string, mergeBranch string) (mergeConflictPr string, err error)
+	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error)
 	ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error)
 	CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error
-	ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error)
 	ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error)
 	CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, workflowID int64, clientPayload map[string]interface{}) error
 	ListEpicBranches(ctx context.Context, owner string, repo string) ([]string, error)
@@ -63,60 +61,7 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 	return nil
 }
 
-func (g GithubRepo) MergeBranchWithConflictPr(ctx context.Context, owner string, repo string, baseBranch string, mergeBranch string) (mergeConflictPr string, err error) {
-	maxRetries := 5
-	retryDelay := 5 * time.Second
-	initialWait := 1 * time.Second
-
-	// Wait 1 second before the first merge attempt
-	time.Sleep(initialWait)
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		_, res, err := g.client.Repositories.Merge(ctx, owner, repo, &github.RepositoryMergeRequest{
-			Base:          github.String(mergeBranch),
-			Head:          github.String(baseBranch),
-			CommitMessage: github.String(fmt.Sprintf("Merge branch '%s' into '%s' on %s", mergeBranch, baseBranch, repo)),
-		})
-
-		if err == nil {
-			// Merge successful
-			g.l.Info("Merged branch %s into %s on %s", baseBranch, mergeBranch, repo)
-			return "", nil
-		}
-
-		// Handle 409 conflict (merge conflict) - don't retry, handle immediately
-		if res != nil && res.StatusCode == 409 {
-			g.l.Error("Merge conflict: %v", err)
-			prURL, _, err := g.CreatePullRequest(ctx, owner, repo, baseBranch, mergeBranch, "Merge conflict to "+mergeBranch, "Merge conflict to "+mergeBranch)
-			if err != nil {
-				g.l.Error("Error creating merge PR: %v", err)
-				return "", fmt.Errorf("error creating merge PR: %v", err)
-			}
-			return prURL, nil
-		}
-
-		// Handle 404 error - retry with delay
-		if res != nil && res.StatusCode == 404 {
-			if attempt < maxRetries {
-				g.l.Warn("Merge failed with 404 error (attempt %d/%d), retrying after %v: %v", attempt, maxRetries, retryDelay, err)
-				time.Sleep(retryDelay)
-				continue
-			} else {
-				g.l.Error("Merge failed with 404 error after %d attempts: %v", maxRetries, err)
-				return "", fmt.Errorf("error merging branch after %d retries: %v", maxRetries, err)
-			}
-		}
-
-		// Other errors - return immediately without retry
-		g.l.Error("Error merging branch: %v", err)
-		return "", fmt.Errorf("error merging branch: %v", err)
-	}
-
-	// Should not reach here, but handle just in case
-	return "", fmt.Errorf("error merging branch: max retries exceeded")
-}
-
-func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, err error) {
+func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error) {
 	prInfo := &github.NewPullRequest{
 		Title: github.String(title),
 		Body:  github.String(body),
@@ -126,38 +71,69 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 	pr, resp, err := g.client.PullRequests.Create(ctx, owner, repo, prInfo)
 	if err != nil {
 		if resp != nil && resp.StatusCode == 422 {
-			body, _ := io.ReadAll(resp.Body)
+			bodyBytes, _ := io.ReadAll(resp.Body)
 			var responseBody map[string]interface{}
-			if err := json.Unmarshal(body, &responseBody); err != nil {
+			if err := json.Unmarshal(bodyBytes, &responseBody); err != nil {
 				g.l.Error("Error unmarshalling response body: %v", err)
-				return "", "", fmt.Errorf("error unmarshalling response body: %v", err)
+				return "", "", false, fmt.Errorf("error unmarshalling response body: %v", err)
 			}
 			if errors, ok := responseBody["errors"].([]interface{}); ok && len(errors) > 0 {
 				if message, ok := errors[0].(map[string]interface{})["message"].(string); ok {
 					g.l.Error("Response message: %s", message)
 					prError = message
 				} else {
-					g.l.Error("Response body: %s", body)
+					g.l.Error("Response body: %s", string(bodyBytes))
 				}
 			} else {
-				g.l.Error("Response body: %s", body)
+				g.l.Error("Response body: %s", string(bodyBytes))
 			}
 		} else {
 			g.l.Error("Error creating PR: %v", err)
-			return "", "", fmt.Errorf("error %s creating PR: %v", resp.Status, err)
+			return "", "", false, fmt.Errorf("error %s creating PR: %v", resp.Status, err)
 		}
 	} else {
 		g.l.Info("Created PR for branch %s on Repo %s", toBranch, repo)
 	}
 
-	prUrl = pr.GetHTMLURL()
+	if pr != nil {
+		prUrl = pr.GetHTMLURL()
+		
+		// Poll to check for merge conflicts.
+		// GitHub calculates PR mergeability asynchronously in the background.
+		// When a PR is first created, prCheck.Mergeable is often nil while GitHub computes it.
+		// This loop polls the API until Mergeable is no longer nil (meaning the calculation is done),
+		// or until maxRetries is reached.
+		maxRetries := 5
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			time.Sleep(2 * time.Second) // Wait for GitHub to calculate mergeability
+			
+			prCheck, _, checkErr := g.client.PullRequests.Get(ctx, owner, repo, pr.GetNumber())
+			if checkErr != nil {
+				g.l.Error("Error checking PR mergeability: %v", checkErr)
+				break
+			}
+			
+			if prCheck.Mergeable != nil {
+				hasConflicts = !*prCheck.Mergeable
+				if hasConflicts {
+					g.l.Warn("PR %d has merge conflicts", pr.GetNumber())
+				}
+				break
+			}
+			
+			if attempt == maxRetries {
+				g.l.Warn("Could not determine mergeability for PR %d after %d attempts", pr.GetNumber(), maxRetries)
+			}
+		}
+	}
+
 	if prUrl == "" {
 		prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 			Head: owner + ":" + fromBranch,
 		})
 		if err != nil {
 			g.l.Error("Error getting PR: %v", err)
-			return "", "", fmt.Errorf("error getting PR: %v", err)
+			return "", "", false, fmt.Errorf("error getting PR: %v", err)
 		}
 		if len(prs) > 0 {
 			prUrl = prs[0].GetHTMLURL()
@@ -165,7 +141,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 		print(prUrl)
 	}
 	g.l.Info("PR URL: %s", prUrl)
-	return prUrl, prError, nil
+	return prUrl, prError, hasConflicts, nil
 }
 
 func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase string, includeRepositories string, excludeRepositories string, excludeProdReleaseRepostories string) ([]string, error) {
@@ -230,48 +206,6 @@ func (g GithubRepo) CreateRepositoryDispatches(ctx context.Context, owner string
 	g.l.Info("Dispatched event %s to %s", eventType, repo)
 
 	return nil
-}
-
-func (g GithubRepo) ListPullRequests(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, state string) ([]map[string]interface{}, error) {
-	prs, _, err := g.client.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
-		Base:  toBranch,
-		Head:  owner + "/" + fromBranch,
-		State: state,
-	})
-
-	if err != nil {
-		g.l.Error("Error listing PRs: %v", err)
-		return nil, fmt.Errorf("error listing PRs: %v", err)
-	}
-
-	response := make([]map[string]interface{}, 0, len(prs))
-	for _, pr := range prs {
-		if pr.Head.Ref != nil {
-			prHeadBranch:= *pr.Head.Ref
-			if prHeadBranch == fromBranch {
-				g.l.Info("Listing pr from current rc branch: %v",prHeadBranch)
-				response = append(response, map[string]interface{}{
-					"url":        pr.GetHTMLURL(),
-					"id":         pr.GetID(),
-					"repository": repo,
-					"state":      pr.GetState(),
-				})
-			} else{
-				g.l.Info("skipping pr from non current rc branch %v",prHeadBranch)
-			}
-
-		} else {
-			g.l.Info("Listing pr as Head info can't be obtained")
-			response = append(response, map[string]interface{}{
-				"url":        pr.GetHTMLURL(),
-				"id":         pr.GetID(),
-				"repository": repo,
-				"state":      pr.GetState(),
-			})
-		}
-	}
-
-	return response, nil
 }
 
 func (g GithubRepo) ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error) {
@@ -358,8 +292,16 @@ func (g GithubRepo) ListEpicBranches(ctx context.Context, owner string, repo str
 }
 
 func (g GithubRepo) DeleteBranch(ctx context.Context, owner string, repo string, branchName string) error {
-	_, err := g.client.Git.DeleteRef(ctx, owner, repo, "refs/heads/"+branchName)
+	resp, err := g.client.Git.DeleteRef(ctx, owner, repo, "refs/heads/"+branchName)
 	if err != nil {
+		// The branch may already be gone - GitHub can auto-delete the head branch
+		// when its PR is closed/merged, or a previous run already removed it. In
+		// that case DeleteRef returns 422 "Reference does not exist" (sometimes
+		// 404). Treat it as a successful no-op so cleanup stays idempotent.
+		if resp != nil && (resp.StatusCode == 422 || resp.StatusCode == 404) {
+			g.l.Info("Branch %s in repo %s already gone (HTTP %d: %v) - likely auto-deleted with its PR; skipping intentionally", branchName, repo, resp.StatusCode, err)
+			return nil
+		}
 		g.l.Error("Error deleting branch %s in repo %s: %v", branchName, repo, err)
 		return fmt.Errorf("error deleting branch %s in repo %s: %v", branchName, repo, err)
 	}
