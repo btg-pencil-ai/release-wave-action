@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"strings"
 	"context"
 	"fmt"
 	"release-candidate/internal/configs"
@@ -12,6 +13,12 @@ func ProductionWorkflowDispatch(ctx context.Context, l utils.LogInterface, githu
 	payload := map[string]interface{}{
 		"environment":     variables.Environment,
 		"release_version": variables.RCVersion,
+	}
+	// Forward the releasing user's Slack ID so per-repo failure notifications can
+	// mention them. Only when set: repos must declare the input, and sending it to
+	// one that hasn't would fail the dispatch with 422 "Unexpected inputs".
+	if strings.TrimSpace(variables.SlackUserID) != "" {
+		payload["slack_user_id"] = variables.SlackUserID
 	}
 	prodWorkflowFilter := "prod-release.*"
 

@@ -21,6 +21,7 @@ type Config struct {
 	RCBranch                       string
 	HydraWebhookURL                string
 	HydraWebhookSecret             string
+	SlackUserID                    string
 	EnableMainToEpicSync           bool
 }
 
@@ -82,6 +83,7 @@ func Variables() (*Config, error) {
 	if hydraWebhookSecret != "" {
 		githubactions.AddMask(hydraWebhookSecret)
 	}
+	slackUserID := githubactions.GetInput("slack_user_id")
 	return &Config{
 		LogLevel:                       logLevel,
 		UseCase:                        usecase,
@@ -98,6 +100,7 @@ func Variables() (*Config, error) {
 		ExcludeProdReleaseRepositories: excludeProdReleaseRepostories,
 		HydraWebhookURL:                hydraWebhookURL,
 		HydraWebhookSecret:             hydraWebhookSecret,
+		SlackUserID:                    slackUserID,
 		EnableMainToEpicSync:			enableMainToEpicSyncBool,
 	}, nil
 }

@@ -50,6 +50,9 @@ inputs:
   hydra_webhook_secret:
     description: 'The secret for the Hydra webhook'
     required: false
+  slack_user_id:
+    description: 'Slack member ID of the releasing user; forwarded to per-repo prod-release dispatches so failures can mention them (empty when unresolvable)'
+    required: false
   
 outputs:
   slack_payload:
