@@ -22,6 +22,7 @@ type Config struct {
 	HydraWebhookURL                string
 	HydraWebhookSecret             string
 	EnableMainToEpicSync           bool
+	EnableSyncAutoMerge            bool
 }
 
 func Variables() (*Config, error) {
@@ -77,6 +78,8 @@ func Variables() (*Config, error) {
 	enableMainToEpicSyncString := githubactions.GetInput("enable_main_to_epic_sync")
 	enableMainToEpicSyncBool := (enableMainToEpicSyncString == "true")
 
+	enableSyncAutoMergeBool := githubactions.GetInput("enable_sync_auto_merge") == "true"
+
     hydraWebhookURL := githubactions.GetInput("hydra_webhook_url")
 	hydraWebhookSecret := githubactions.GetInput("hydra_webhook_secret")
 	if hydraWebhookSecret != "" {
@@ -99,5 +102,6 @@ func Variables() (*Config, error) {
 		HydraWebhookURL:                hydraWebhookURL,
 		HydraWebhookSecret:             hydraWebhookSecret,
 		EnableMainToEpicSync:			enableMainToEpicSyncBool,
+		EnableSyncAutoMerge:            enableSyncAutoMergeBool,
 	}, nil
 }

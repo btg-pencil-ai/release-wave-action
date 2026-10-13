@@ -112,7 +112,7 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 		}
 
 		// Create PRs from sync branches to epic branches
-		prResults, err := CreatePRsFromSyncToEpic(ctx, l, githubRepo, cfg.Owner, cfg.RCVersion, syncResults)
+		prResults, err := CreatePRsFromSyncToEpic(ctx, l, githubRepo, cfg.Owner, cfg.RCVersion, syncResults, cfg.EnableSyncAutoMerge)
 
 		// Log PR creation results
 		prResultsByEpic := make(map[string][]map[string]interface{})
@@ -124,16 +124,17 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 			}
 
 			prMap := map[string]interface{}{
-				"repo":         result.Repo,
-				"url":          result.PRURL,
-				"error":        result.Error,
-				"hasConflicts": result.HasConflicts,
+				"repo":            result.Repo,
+				"url":             result.PRURL,
+				"error":           result.Error,
+				"hasConflicts":    result.HasConflicts,
+				"autoMergeStatus": string(result.AutoMergeStatus),
 			}
 			prResultsByEpic[result.Epic] = append(prResultsByEpic[result.Epic], prMap)
 		}
 
 		if len(prResultsByEpic) > 0 {
-			slackPayload, err := utils.MainToEpicSyncSlackPayloadBuilder(cfg.RCVersion, prResultsByEpic)
+			slackPayload, err := utils.MainToEpicSyncSlackPayloadBuilder(cfg.RCVersion, prResultsByEpic, cfg.EnableSyncAutoMerge)
 			if err != nil {
 				l.Error("Error building sync slack payload: %v", err)
 			} else {

@@ -194,10 +194,14 @@ type SyncToEpicPRResult struct {
 	Created      bool
 	HasConflicts bool
 	Error        string
+	// AutoMergeStatus is empty when auto-merge is disabled or was not attempted (PR not created, or conflicts)
+	AutoMergeStatus githubrepo.AutoMergeStatus
+	AutoMergeError  string
 }
 
-// CreatePRsFromSyncToEpic creates PRs from sync branches to their corresponding epic branches
-func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, owner string, releaseVersion string, syncResults []SyncBranchResult) ([]SyncToEpicPRResult, error) {
+// CreatePRsFromSyncToEpic creates PRs from sync branches to their corresponding epic branches.
+// With autoMerge, each conflict-free PR merges as soon as its required checks pass (see AutoMergePullRequest).
+func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, owner string, releaseVersion string, syncResults []SyncBranchResult, autoMerge bool) ([]SyncToEpicPRResult, error) {
 	var results []SyncToEpicPRResult
 	var errs []string
 
@@ -215,7 +219,7 @@ func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRe
 
 			l.Info("Creating PR from '%s' to '%s' in repo '%s'", syncResult.BranchName, epicBranch, syncResult.Repo)
 
-			prURL, prError, hasConflicts, err := githubRepo.CreatePullRequest(ctx, owner, syncResult.Repo, syncResult.BranchName, epicBranch, prTitle, prBody)
+			prURL, prNumber, prError, hasConflicts, err := githubRepo.CreatePullRequest(ctx, owner, syncResult.Repo, syncResult.BranchName, epicBranch, prTitle, prBody)
 
 			result := SyncToEpicPRResult{
 				Repo:         syncResult.Repo,
@@ -241,6 +245,10 @@ func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRe
 				result.PRURL = prURL
 			}
 
+			if autoMerge && result.Created && prNumber > 0 && !hasConflicts {
+				autoMergeSyncPR(ctx, l, githubRepo, owner, &result, prNumber)
+			}
+
 			results = append(results, result)
 		}
 	}
@@ -250,6 +258,30 @@ func CreatePRsFromSyncToEpic(ctx context.Context, l utils.LogInterface, githubRe
 	}
 
 	return results, nil
+}
+
+// autoMergeSyncPR merges the sync PR once its tests pass, or right away when nothing is required.
+// Failures are recorded on the result only; hydra-controller's 8 PM IST job retries open sync PRs.
+func autoMergeSyncPR(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, owner string, result *SyncToEpicPRResult, prNumber int) {
+	commitTitle := fmt.Sprintf("Merge %s into %s", result.SyncBranch, result.EpicBranch)
+	commitMessage := fmt.Sprintf("Automated merge for epic %s", result.Epic)
+
+	status, err := githubRepo.AutoMergePullRequest(ctx, owner, result.Repo, prNumber, commitTitle, commitMessage)
+	result.AutoMergeStatus = status
+	if err != nil {
+		l.Warn("Sync PR %s left for the 8 PM IST merge: %v", result.PRURL, err)
+		result.AutoMergeError = err.Error()
+		return
+	}
+	l.Info("Sync PR %s: %s", result.PRURL, status)
+
+	// GitHub deletes the head branch of an auto-merged PR only when the repo enables that, so the
+	// merged-now case cleans up here the way the 8 PM job does.
+	if status == githubrepo.AutoMergeMerged {
+		if err := githubRepo.DeleteBranch(ctx, owner, result.Repo, result.SyncBranch); err != nil {
+			l.Warn("Merged sync PR %s but could not delete branch '%s': %v", result.PRURL, result.SyncBranch, err)
+		}
+	}
 }
 
 // CleanupOldSyncBranches checks for open PRs targeting the epic branches and closes them if they are from old sync branches and deletes the sync branch

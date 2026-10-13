@@ -15,7 +15,8 @@ import (
 
 type GitHubWebApis interface {
 	CreateBranch(ctx context.Context, owner string, repo string, baseBranch string, newBranch string) error
-	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error)
+	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prNumber int, prError string, hasConflicts bool, err error)
+	AutoMergePullRequest(ctx context.Context, owner string, repo string, prNumber int, commitTitle string, commitMessage string) (AutoMergeStatus, error)
 	ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error)
 	CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error
 	ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error)
@@ -61,7 +62,7 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 	return nil
 }
 
-func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error) {
+func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prNumber int, prError string, hasConflicts bool, err error) {
 	prInfo := &github.NewPullRequest{
 		Title: github.String(title),
 		Body:  github.String(body),
@@ -75,7 +76,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 			var responseBody map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &responseBody); err != nil {
 				g.l.Error("Error unmarshalling response body: %v", err)
-				return "", "", false, fmt.Errorf("error unmarshalling response body: %v", err)
+				return "", 0, "", false, fmt.Errorf("error unmarshalling response body: %v", err)
 			}
 			if errors, ok := responseBody["errors"].([]interface{}); ok && len(errors) > 0 {
 				if message, ok := errors[0].(map[string]interface{})["message"].(string); ok {
@@ -89,7 +90,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 			}
 		} else {
 			g.l.Error("Error creating PR: %v", err)
-			return "", "", false, fmt.Errorf("error %s creating PR: %v", resp.Status, err)
+			return "", 0, "", false, fmt.Errorf("error %s creating PR: %v", resp.Status, err)
 		}
 	} else {
 		g.l.Info("Created PR for branch %s on Repo %s", toBranch, repo)
@@ -97,6 +98,7 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 
 	if pr != nil {
 		prUrl = pr.GetHTMLURL()
+		prNumber = pr.GetNumber()
 		
 		// Poll to check for merge conflicts.
 		// GitHub calculates PR mergeability asynchronously in the background.
@@ -133,15 +135,85 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 		})
 		if err != nil {
 			g.l.Error("Error getting PR: %v", err)
-			return "", "", false, fmt.Errorf("error getting PR: %v", err)
+			return "", 0, "", false, fmt.Errorf("error getting PR: %v", err)
 		}
 		if len(prs) > 0 {
 			prUrl = prs[0].GetHTMLURL()
+			prNumber = prs[0].GetNumber()
 		}
 		print(prUrl)
 	}
 	g.l.Info("PR URL: %s", prUrl)
-	return prUrl, prError, hasConflicts, nil
+	return prUrl, prNumber, prError, hasConflicts, nil
+}
+
+// AutoMergeStatus is the outcome of AutoMergePullRequest.
+type AutoMergeStatus string
+
+const (
+	AutoMergeEnabled AutoMergeStatus = "auto-merge-enabled" // GitHub merges it once the required checks pass
+	AutoMergeMerged  AutoMergeStatus = "merged"             // nothing left to wait for, merged right away
+	AutoMergeFailed  AutoMergeStatus = "failed"             // left open; hydra-controller's 8 PM IST job retries it
+)
+
+// AutoMergePullRequest makes the PR merge as soon as its required checks (tests-gate-validation) pass.
+// It first enables GitHub auto-merge. GitHub refuses that for a PR that is already mergeable (repos with no
+// required checks on the base branch), so it then falls back to merging right away. That merge is itself
+// refused while required checks are pending or failing, so tests are never bypassed.
+func (g GithubRepo) AutoMergePullRequest(ctx context.Context, owner string, repo string, prNumber int, commitTitle string, commitMessage string) (AutoMergeStatus, error) {
+	pr, _, err := g.client.PullRequests.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		g.l.Error("Error getting PR %d in repo %s: %v", prNumber, repo, err)
+		return AutoMergeFailed, fmt.Errorf("error getting PR %d in repo %s: %v", prNumber, repo, err)
+	}
+
+	autoMergeErr := g.enableAutoMerge(ctx, pr.GetNodeID())
+	if autoMergeErr == nil {
+		g.l.Info("Enabled auto-merge on PR %d in repo %s", prNumber, repo)
+		return AutoMergeEnabled, nil
+	}
+	g.l.Info("Could not enable auto-merge on PR %d in repo %s (%v), trying to merge now", prNumber, repo, autoMergeErr)
+
+	_, _, mergeErr := g.client.PullRequests.Merge(ctx, owner, repo, prNumber, commitMessage, &github.PullRequestOptions{
+		MergeMethod: "merge",
+		CommitTitle: commitTitle,
+	})
+	if mergeErr != nil {
+		g.l.Warn("Could not merge PR %d in repo %s: %v", prNumber, repo, mergeErr)
+		return AutoMergeFailed, fmt.Errorf("enable auto-merge: %v; merge: %v", autoMergeErr, mergeErr)
+	}
+	g.l.Info("Merged PR %d in repo %s", prNumber, repo)
+	return AutoMergeMerged, nil
+}
+
+// enableAutoMerge runs the enablePullRequestAutoMerge GraphQL mutation; the REST API has no equivalent.
+func (g GithubRepo) enableAutoMerge(ctx context.Context, prNodeID string) error {
+	payload := map[string]interface{}{
+		"query":     `mutation($id: ID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: MERGE}) { clientMutationId } }`,
+		"variables": map[string]string{"id": prNodeID},
+	}
+	req, err := g.client.NewRequest("POST", "graphql", payload)
+	if err != nil {
+		return fmt.Errorf("error building graphql request: %v", err)
+	}
+
+	// GraphQL reports failures in the body with HTTP 200.
+	var resp struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if _, err := g.client.Do(ctx, req, &resp); err != nil {
+		return err
+	}
+	if len(resp.Errors) > 0 {
+		messages := make([]string, 0, len(resp.Errors))
+		for _, e := range resp.Errors {
+			messages = append(messages, e.Message)
+		}
+		return fmt.Errorf("%s", strings.Join(messages, "; "))
+	}
+	return nil
 }
 
 func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase string, includeRepositories string, excludeRepositories string, excludeProdReleaseRepostories string) ([]string, error) {

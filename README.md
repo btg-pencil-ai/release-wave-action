@@ -21,6 +21,7 @@ This is a custom GitHub action written in Go to automate release candidate branc
 | `exclude_repos`      | A comma-separated list of repositories to exclude.      |                             | false    |
 | `environment` |  Porduction environment | | false |
 | `enable_main_to_epic_sync` | Enable sync from main to epic branches | `false` | false |
+| `enable_sync_auto_merge` | Merge each sync PR as soon as its required checks (`tests-gate-validation`) pass; repos with no required checks merge right away. Needs "Allow auto-merge" in each repo. | `false` | false |
 | `hydra_webhook_url` | The URL for the Hydra webhook | | false |
 | `hydra_webhook_secret` | The secret for the Hydra webhook | | false |
 

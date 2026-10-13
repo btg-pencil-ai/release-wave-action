@@ -105,7 +105,7 @@ func ProductionWorkflowDispatchSlackPayloadBuilder(rcVersion string, repoList []
 	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
 }
 
-func MainToEpicSyncSlackPayloadBuilder(rcVersion string, prResultsByEpic map[string][]map[string]interface{}) (string, error) {
+func MainToEpicSyncSlackPayloadBuilder(rcVersion string, prResultsByEpic map[string][]map[string]interface{}, autoMerge bool) (string, error) {
 	var detailsTextSectionList []interface{}
 
 	for epic, prs := range prResultsByEpic {
@@ -115,9 +115,17 @@ func MainToEpicSyncSlackPayloadBuilder(rcVersion string, prResultsByEpic map[str
 			repo := pr["repo"].(string)
 			if prUrl, ok := pr["url"].(string); ok && prUrl != "" {
 				hasConflicts, _ := pr["hasConflicts"].(bool)
-				if hasConflicts {
+				autoMergeStatus, _ := pr["autoMergeStatus"].(string)
+				switch {
+				case hasConflicts:
 					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:warning: PR-Link (Conflicts)>\n", repo, prUrl))
-				} else {
+				case autoMergeStatus == "merged":
+					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:white_check_mark: PR-Link (Merged)>\n", repo, prUrl))
+				case autoMergeStatus == "auto-merge-enabled":
+					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:hourglass_flowing_sand: PR-Link (Merges when tests pass)>\n", repo, prUrl))
+				case autoMergeStatus == "failed":
+					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:warning: PR-Link (Auto-merge failed, retried at 8 PM IST)>\n", repo, prUrl))
+				default:
 					details.WriteString(fmt.Sprintf("• *`%s`:* <%s|:white_check_mark: PR-Link>\n", repo, prUrl))
 				}
 			} else if errStr, ok := pr["error"].(string); ok && errStr != "" {
@@ -138,6 +146,9 @@ func MainToEpicSyncSlackPayloadBuilder(rcVersion string, prResultsByEpic map[str
 
 	headerText := fmt.Sprintf("🔄 Main to Epic Sync - %s", rcVersion)
 	sectionText := "The following sync PRs have been processed for active epics & will be auto merged at 8 PM IST: 📋"
+	if autoMerge {
+		sectionText = "The following sync PRs have been processed for active epics & merge as soon as their tests pass. Anything still open is retried at 8 PM IST: 📋"
+	}
 
 	return buildSlackPayload(headerText, sectionText, detailsTextSectionList)
 }

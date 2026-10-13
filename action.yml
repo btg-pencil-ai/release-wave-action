@@ -44,6 +44,10 @@ inputs:
     description: 'Enable sync from main to epic branches'
     required: false
     default: 'false'
+  enable_sync_auto_merge:
+    description: 'Merge each main-to-epic sync PR as soon as its required checks pass (falls back to the 8 PM IST hydra-controller job)'
+    required: false
+    default: 'false'
   hydra_webhook_url:
     description: 'The URL for the Hydra webhook'
     required: false
