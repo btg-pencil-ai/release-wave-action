@@ -17,14 +17,15 @@ type GitHubWebApis interface {
 	CreateBranch(ctx context.Context, owner string, repo string, baseBranch string, newBranch string) error
 	CreatePullRequest(ctx context.Context, owner string, repo string, fromBranch string, toBranch string, title string, body string) (prUrl string, prError string, hasConflicts bool, err error)
 	ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error)
-	CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error
 	ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error)
-	CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, workflowID int64, clientPayload map[string]interface{}) error
+	CreateWorkflowDispatchEventByID(ctx context.Context, owner string, repo string, ref string, workflowID int64, clientPayload map[string]interface{}) error
 	ListEpicBranches(ctx context.Context, owner string, repo string) ([]string, error)
 	DeleteBranch(ctx context.Context, owner string, repo string, branchName string) error
 	ClosePullRequest(ctx context.Context, owner string, repo string, prNumber int, comment string) error
 	ListOpenPullRequestsByBase(ctx context.Context, owner string, repo string, baseBranch string) ([]*github.PullRequest, error)
 }
+
+var _ GitHubWebApis = GithubRepo{}
 
 type GithubRepo struct {
 	client *github.Client
@@ -45,13 +46,13 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 		return fmt.Errorf("error getting ref: %v", err)
 	}
 
-	newRCBranchRef := &github.Reference{
+	newBranchRef := &github.Reference{
 		Ref:    github.String("refs/heads/" + newBranch),
 		Object: &github.GitObject{SHA: ref.Object.SHA},
 	}
 
 	if _, _, err := g.client.Git.GetRef(ctx, owner, repo, "refs/heads/"+newBranch); err != nil {
-		if _, _, err := g.client.Git.CreateRef(ctx, owner, repo, newRCBranchRef); err != nil {
+		if _, _, err := g.client.Git.CreateRef(ctx, owner, repo, newBranchRef); err != nil {
 			g.l.Error("Error creating branch %s on %s: %v", newBranch, repo, err)
 			return fmt.Errorf("error creating branch %s on %s: %v", newBranch, repo, err)
 		} else {
@@ -138,13 +139,12 @@ func (g GithubRepo) CreatePullRequest(ctx context.Context, owner string, repo st
 		if len(prs) > 0 {
 			prUrl = prs[0].GetHTMLURL()
 		}
-		print(prUrl)
 	}
 	g.l.Info("PR URL: %s", prUrl)
 	return prUrl, prError, hasConflicts, nil
 }
 
-func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase string, includeRepositories string, excludeRepositories string, excludeProdReleaseRepostories string) ([]string, error) {
+func (g GithubRepo) ListRepositories(ctx context.Context, owner string, includeRepositories string, excludeRepositories string) ([]string, error) {
 	var repoList []string
 	if includeRepositories != "" {
 		repoList = strings.Split(includeRepositories, ",")
@@ -175,37 +175,11 @@ func (g GithubRepo) ListRepositories(ctx context.Context, owner string, usecase 
 			if strings.Contains(excludeRepositories, repoName) {
 				continue
 			}
-			if usecase == "Production-Release" && strings.Contains(excludeProdReleaseRepostories, repoName) {
-				continue
-			}
 			repoList = append(repoList, repoName)
 		}
 	}
 	g.l.Info("Repositories: %v", repoList)
 	return repoList, nil
-}
-
-func (g GithubRepo) CreateRepositoryDispatches(ctx context.Context, owner string, repo string, eventType string, clientPayload map[string]interface{}) error {
-
-	payloadBytes, err := json.Marshal(clientPayload)
-	if err != nil {
-		g.l.Error("Error marshalling client payload: %v", err)
-		return fmt.Errorf("error marshalling client payload: %v", err)
-	}
-	payload := json.RawMessage(payloadBytes)
-
-	dispatchOptions := &github.DispatchRequestOptions{
-		EventType:     eventType,
-		ClientPayload: &payload,
-	}
-	_, _, err = g.client.Repositories.Dispatch(ctx, owner, repo, *dispatchOptions)
-	if err != nil {
-		g.l.Error("Error dispatching event: %v", err)
-		return fmt.Errorf("error dispatching event: %v", err)
-	}
-	g.l.Info("Dispatched event %s to %s", eventType, repo)
-
-	return nil
 }
 
 func (g GithubRepo) ListWorkFlowsByRepoFileFilter(ctx context.Context, owner string, repo string, fileFilterRegex string) ([]RespWorkflow, error) {
@@ -237,7 +211,7 @@ func (g GithubRepo) ListWorkFlowsByRepoFileFilter(ctx context.Context, owner str
 		}
 	}
 
-	fmt.Printf("Workflows: %v", filteredWorkflows)
+	g.l.Debug("Workflows matching %q in %s: %v", fileFilterRegex, repo, filteredWorkflows)
 
 	return filteredWorkflows, nil
 }
