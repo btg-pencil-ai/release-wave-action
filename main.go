@@ -22,8 +22,6 @@ func main() {
 		l.Fatal("Error validating RC version: %v", err)
 	}
 
-	config.RCBranch = "rc/" + config.RCVersion
-
 	githubClient, err := utils.CreateGitHubClient(config)
 	if err != nil {
 		l.Fatal("Error creating GitHub client: %v", err)

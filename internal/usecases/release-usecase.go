@@ -24,7 +24,7 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 	l.Info("Production-Release use case")
 
 	githubRepo := githubrepo.NewGithubRepo(client, l) // init githubRepo struct
-	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.UseCase, cfg.IncludeRepositories, cfg.ExcludeRepositories, cfg.ExcludeProdReleaseRepositories)
+	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
 	if err != nil {
 		l.Fatal("Error listing repositories: %v", err)
 	}
@@ -57,7 +57,7 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 
 	if len(repoList) == 0 {
 		var err error
-		repoList, err = githubRepo.ListRepositories(ctx, cfg.Owner, cfg.UseCase, cfg.IncludeRepositories, cfg.ExcludeRepositories, cfg.ExcludeProdReleaseRepositories)
+		repoList, err = githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
 		if err != nil {
 			l.Fatal("Error listing repositories: %v", err)
 		}
