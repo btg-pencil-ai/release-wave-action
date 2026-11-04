@@ -44,23 +44,14 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 	}
 	PostReleaseWaveStatus(l, cfg, "workflow_completed", "success", repoList)
 	safeSetOutput("slack_payload", slackPayload, l)
-
-	if cfg.EnableMainToEpicSync {
-		MainToEpicSyncUseCase(ctx, l, githubRepo, cfg, repoList)
-	} else {
-		l.Info("Main to Epic Sync is disabled, skipping sync")
-	}
 }
 
-func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, cfg *configs.Config, repoList []string) {
+func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, cfg *configs.Config) {
 	l.Info("Starting Main to Epic Sync")
 
-	if len(repoList) == 0 {
-		var err error
-		repoList, err = githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
-		if err != nil {
-			l.Fatal("Error listing repositories: %v", err)
-		}
+	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
+	if err != nil {
+		l.Fatal("Error listing repositories: %v", err)
 	}
 	l.Info("repoList: %v", repoList)
 	// Fetch active epics from Hydra webhook
