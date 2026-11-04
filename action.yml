@@ -37,10 +37,6 @@ inputs:
   environment:
     description: 'The environment'
     required: false
-  enable_main_to_epic_sync:
-    description: 'Enable sync from main to epic branches'
-    required: false
-    default: 'false'
   hydra_webhook_url:
     description: 'The URL for the Hydra webhook'
     required: false
