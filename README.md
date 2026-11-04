@@ -12,7 +12,6 @@ Set with the `use_case` input.
 1. Builds the repository list (see [Repository selection](#-repository-selection)).
 2. For each repository, dispatches every workflow whose file name matches `prod-release.*` on `production_branch`, with the inputs `environment` and `release_version` (= `rc_version`).
 3. Sets the `slack_payload` output.
-4. If `enable_main_to_epic_sync` is `true`, runs `Main-To-Epic-Sync` for the same repositories.
 
 If `hydra_webhook_url` is set, the start and the result of the wave are also reported to that webhook.
 
@@ -39,7 +38,6 @@ If `hydra_webhook_url` is set, the start and the result of the wave are also rep
 | `environment` | Environment name passed to the production workflows | | false |
 | `include_repositories` | Repositories to use instead of all of `owner`'s | | false |
 | `exclude_repositories` | Repositories to skip | | false |
-| `enable_main_to_epic_sync` | Run `Main-To-Epic-Sync` after a `Production-Release` | `false` | false |
 | `hydra_webhook_url` | Base URL of the status / active-epics webhook | | false¹ |
 | `hydra_webhook_secret` | Secret used to sign webhook requests (HMAC-SHA256, `X-Hub-Signature-256` header) | | false |
 | `app_id` | GitHub App ID | | false² |
@@ -82,6 +80,34 @@ jobs:
         uses: slackapi/slack-github-action@v2.0.0
         with:
           payload: ${{ steps.release.outputs.slack_payload }}
+          webhook-type: incoming-webhook
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  sync:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync pull requests
+        id: sync
+        uses: <owner>/release-wave-action@main
+        with:
+          use_case: "Main-To-Epic-Sync"
+          rc_version: "v1.2.5"
+          owner: "<owner>"
+          production_branch: "main"
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          installation_id: ${{ secrets.APP_INSTALLATION_ID }}
+          exclude_repositories: "repo-a,repo-b"
+          hydra_webhook_url: ${{ vars.WEBHOOK_URL }}
+          hydra_webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+
+      - name: Slack notification
+        if: ${{ always() && steps.sync.outputs.sync_pr_slack_payload != '' }}
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          payload: ${{ steps.sync.outputs.sync_pr_slack_payload }}
           webhook-type: incoming-webhook
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -34,8 +34,7 @@ func main() {
 	case "Main-To-Epic-Sync":
 		l.Info("Main-To-Epic-Sync use case")
 		githubRepo := githubrepo.NewGithubRepo(githubClient, l)
-		// repoList is nil because it will be fetched later from the github repo
-		usecases.MainToEpicSyncUseCase(context.Background(), l, githubRepo, config, nil)
+		usecases.MainToEpicSyncUseCase(context.Background(), l, githubRepo, config)
 	default:
 		l.Fatal("Invalid use case")
 
