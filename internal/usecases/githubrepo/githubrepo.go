@@ -51,18 +51,28 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 		Object: &github.GitObject{SHA: ref.Object.SHA},
 	}
 
+	existed := false
 	if _, _, err := g.client.Git.GetRef(ctx, owner, repo, "refs/heads/"+newBranch); err == nil {
 		// Left over from an earlier run of the same version (no PR, a failed PR, a PR closed by
-		// hand): delete it so the new branch starts from the current base. If the delete fails,
-		// keep using the existing branch.
-		resp, delErr := g.client.Git.DeleteRef(ctx, owner, repo, "refs/heads/"+newBranch)
-		if delErr != nil && (resp == nil || (resp.StatusCode != 404 && resp.StatusCode != 422)) {
-			g.l.Warn("Branch %s already exists on %s and could not be deleted, using it as is: %v", newBranch, repo, delErr)
+		// hand): reset it to the current base in one call. If the reset fails, keep using the
+		// existing branch; if the branch is gone by now, create it below.
+		existed = true
+		_, resp, upErr := g.client.Git.UpdateRef(ctx, owner, repo, newBranchRef, true)
+		if upErr == nil {
+			g.l.Info("Reset existing branch %s on %s to %s", newBranch, repo, baseBranch)
 			return nil
 		}
-		g.l.Info("Deleted existing branch %s on %s to recreate it from %s", newBranch, repo, baseBranch)
+		if resp == nil || (resp.StatusCode != 404 && resp.StatusCode != 422) {
+			g.l.Warn("Branch %s already exists on %s and could not be reset, using it as is: %v", newBranch, repo, upErr)
+			return nil
+		}
 	}
 	if _, _, err := g.client.Git.CreateRef(ctx, owner, repo, newBranchRef); err != nil {
+		if existed {
+			// The branch was there a moment ago: never fail on it, use it as is.
+			g.l.Warn("Branch %s on %s could not be reset or recreated, using the existing one: %v", newBranch, repo, err)
+			return nil
+		}
 		g.l.Error("Error creating branch %s on %s: %v", newBranch, repo, err)
 		return fmt.Errorf("error creating branch %s on %s: %v", newBranch, repo, err)
 	}
