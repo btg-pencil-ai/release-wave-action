@@ -51,32 +51,20 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 		Object: &github.GitObject{SHA: ref.Object.SHA},
 	}
 
-	existed := false
-	if _, _, err := g.client.Git.GetRef(ctx, owner, repo, "refs/heads/"+newBranch); err == nil {
-		// Left over from an earlier run of the same version (no PR, a failed PR, a PR closed by
-		// hand): reset it to the current base in one call. If the reset fails, keep using the
-		// existing branch; if the branch is gone by now, create it below.
-		existed = true
-		_, resp, upErr := g.client.Git.UpdateRef(ctx, owner, repo, newBranchRef, true)
-		if upErr == nil {
-			g.l.Info("Reset existing branch %s on %s to %s", newBranch, repo, baseBranch)
-			return nil
+	if _, _, err := g.client.Git.GetRef(ctx, owner, repo, "refs/heads/"+newBranch); err != nil {
+		if _, _, err := g.client.Git.CreateRef(ctx, owner, repo, newBranchRef); err != nil {
+			g.l.Error("Error creating branch %s on %s: %v", newBranch, repo, err)
+			return fmt.Errorf("error creating branch %s on %s: %v", newBranch, repo, err)
+		} else {
+			g.l.Info("Created branch %s on %s", newBranch, repo)
 		}
-		if resp == nil || (resp.StatusCode != 404 && resp.StatusCode != 422) {
-			g.l.Warn("Branch %s already exists on %s and could not be reset, using it as is: %v", newBranch, repo, upErr)
-			return nil
-		}
+	} else if _, _, err := g.client.Git.UpdateRef(ctx, owner, repo, newBranchRef, true); err != nil {
+		// Left over from an earlier run of the same version: reset it to the current base so it
+		// reflects it. If the reset fails, keep using the existing branch.
+		g.l.Warn("Branch %s already exists on %s and could not be reset to %s, using it as is: %v", newBranch, repo, baseBranch, err)
+	} else {
+		g.l.Info("Reset existing branch %s on %s to %s", newBranch, repo, baseBranch)
 	}
-	if _, _, err := g.client.Git.CreateRef(ctx, owner, repo, newBranchRef); err != nil {
-		if existed {
-			// The branch was there a moment ago: never fail on it, use it as is.
-			g.l.Warn("Branch %s on %s could not be reset or recreated, using the existing one: %v", newBranch, repo, err)
-			return nil
-		}
-		g.l.Error("Error creating branch %s on %s: %v", newBranch, repo, err)
-		return fmt.Errorf("error creating branch %s on %s: %v", newBranch, repo, err)
-	}
-	g.l.Info("Created branch %s on %s", newBranch, repo)
 	return nil
 }
 
