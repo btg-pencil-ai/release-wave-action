@@ -1,15 +1,10 @@
 package usecases
 
 import (
-	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 
 	"release-candidate/internal/utils"
 )
@@ -27,36 +22,18 @@ func FetchHydraActiveEpics(l utils.LogInterface, hydraWebhookURL, hydraWebhookSe
 	}
 	body := []byte("{}")
 
-	// Compute HMAC-SHA256 signature
-	signature := computeHMACSHA256(body, hydraWebhookSecret)
-	signatureHeader := fmt.Sprintf("sha256=%s", signature)
-
-	// Safely join the base URL with the endpoint path
-	getActiveEpicsEndpoint := strings.TrimRight(hydraWebhookURL, "/") + "/epics/hydra-active"
-
-	req, err := http.NewRequest(http.MethodPost, getActiveEpicsEndpoint, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Hub-Signature-256", signatureHeader)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
+	// Signed even with an empty secret
+	status, respBody, err := postToHydra(hydraEndpoint(hydraWebhookURL, "/epics/hydra-active"), hydraWebhookSecret, true, body)
+	var buildErr errHydraRequest
+	switch {
+	case errors.As(err, &buildErr):
+		return nil, fmt.Errorf("failed to create request: %w", buildErr.err)
+	case err != nil && status == 0:
 		return nil, fmt.Errorf("failed to call webhook endpoint: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+	case status != http.StatusOK:
+		return nil, fmt.Errorf("webhook returned status %d: %s", status, string(respBody))
+	case err != nil:
+		return nil, err
 	}
 
 	var result ActiveEpicsResponse
@@ -66,11 +43,4 @@ func FetchHydraActiveEpics(l utils.LogInterface, hydraWebhookURL, hydraWebhookSe
 
 	l.Info("Fetched active epics: %v", result.EpicNames)
 	return result.EpicNames, nil
-}
-
-// computeHMACSHA256 computes the HMAC-SHA256 signature for the given data
-func computeHMACSHA256(data []byte, secret string) string {
-	h := hmac.New(sha256.New, []byte(secret))
-	h.Write(data)
-	return hex.EncodeToString(h.Sum(nil))
 }

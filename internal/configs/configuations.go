@@ -5,20 +5,23 @@ import (
 )
 
 type Config struct {
-	LogLevel                       string
-	UseCase                        string
-	Environment                    string
-	Owner                          string
-	Token                          string
-	AppID                          string
-	InstallationID                 string
-	PrivateKey                     string
-	RCVersion                      string
-	ProductionBranch               string
-	IncludeRepositories            string
-	ExcludeRepositories            string
-	HydraWebhookURL                string
-	HydraWebhookSecret             string
+	LogLevel            string
+	UseCase             string
+	Environment         string
+	Owner               string
+	Token               string
+	AppID               string
+	InstallationID      string
+	PrivateKey          string
+	RCVersion           string
+	ProductionBranch    string
+	IncludeRepositories string
+	ExcludeRepositories string
+	HydraWebhookURL     string
+	HydraWebhookSecret  string
+	Epics               []string
+	SyncTrigger         string
+	TriggeredBy         string
 }
 
 func Variables() (*Config, error) {
@@ -70,25 +73,33 @@ func Variables() (*Config, error) {
 	excludeRepositories := githubactions.GetInput("exclude_repositories")
 	includeRepositories := githubactions.GetInput("include_repositories")
 
-    hydraWebhookURL := githubactions.GetInput("hydra_webhook_url")
+	hydraWebhookURL := githubactions.GetInput("hydra_webhook_url")
 	hydraWebhookSecret := githubactions.GetInput("hydra_webhook_secret")
 	if hydraWebhookSecret != "" {
 		githubactions.AddMask(hydraWebhookSecret)
 	}
+	syncTrigger := githubactions.GetInput("sync_trigger")
+	if syncTrigger == "" {
+		syncTrigger = "release"
+	}
+
 	return &Config{
-		LogLevel:                       logLevel,
-		UseCase:                        usecase,
-		Owner:                          owner,
-		Token:                          token,
-		AppID:                          appID,
-		PrivateKey:                     privateKey,
-		InstallationID:                 installationId,
-		RCVersion:                      rcVersion,
-		ProductionBranch:               productionBranch,
-		Environment:                    environment,
-		IncludeRepositories:            includeRepositories,
-		ExcludeRepositories:            excludeRepositories,
-		HydraWebhookURL:                hydraWebhookURL,
-		HydraWebhookSecret:             hydraWebhookSecret,
+		LogLevel:            logLevel,
+		UseCase:             usecase,
+		Owner:               owner,
+		Token:               token,
+		AppID:               appID,
+		PrivateKey:          privateKey,
+		InstallationID:      installationId,
+		RCVersion:           rcVersion,
+		ProductionBranch:    productionBranch,
+		Environment:         environment,
+		IncludeRepositories: includeRepositories,
+		ExcludeRepositories: excludeRepositories,
+		HydraWebhookURL:     hydraWebhookURL,
+		HydraWebhookSecret:  hydraWebhookSecret,
+		Epics:               parseEpics(githubactions.GetInput("epics")),
+		SyncTrigger:         syncTrigger,
+		TriggeredBy:         githubactions.GetInput("triggered_by"),
 	}, nil
 }

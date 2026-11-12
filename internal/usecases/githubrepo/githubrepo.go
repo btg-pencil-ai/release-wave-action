@@ -51,14 +51,22 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 		Object: &github.GitObject{SHA: ref.Object.SHA},
 	}
 
-	if _, _, err := g.client.Git.GetRef(ctx, owner, repo, "refs/heads/"+newBranch); err != nil {
-		if _, _, err := g.client.Git.CreateRef(ctx, owner, repo, newBranchRef); err != nil {
-			g.l.Error("Error creating branch %s on %s: %v", newBranch, repo, err)
-			return fmt.Errorf("error creating branch %s on %s: %v", newBranch, repo, err)
-		} else {
-			g.l.Info("Created branch %s on %s", newBranch, repo)
+	if _, _, err := g.client.Git.GetRef(ctx, owner, repo, "refs/heads/"+newBranch); err == nil {
+		// Left over from an earlier run of the same version (no PR, a failed PR, a PR closed by
+		// hand): delete it so the new branch starts from the current base. If the delete fails,
+		// keep using the existing branch.
+		resp, delErr := g.client.Git.DeleteRef(ctx, owner, repo, "refs/heads/"+newBranch)
+		if delErr != nil && (resp == nil || (resp.StatusCode != 404 && resp.StatusCode != 422)) {
+			g.l.Warn("Branch %s already exists on %s and could not be deleted, using it as is: %v", newBranch, repo, delErr)
+			return nil
 		}
+		g.l.Info("Deleted existing branch %s on %s to recreate it from %s", newBranch, repo, baseBranch)
 	}
+	if _, _, err := g.client.Git.CreateRef(ctx, owner, repo, newBranchRef); err != nil {
+		g.l.Error("Error creating branch %s on %s: %v", newBranch, repo, err)
+		return fmt.Errorf("error creating branch %s on %s: %v", newBranch, repo, err)
+	}
+	g.l.Info("Created branch %s on %s", newBranch, repo)
 	return nil
 }
 

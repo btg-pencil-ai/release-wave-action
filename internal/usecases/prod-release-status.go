@@ -1,13 +1,11 @@
 package usecases
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"release-candidate/internal/configs"
 	"release-candidate/internal/utils"
@@ -52,28 +50,21 @@ func PostReleaseWaveStatus(l utils.LogInterface, cfg *configs.Config, event, con
 		return
 	}
 
-	endpoint := strings.TrimRight(cfg.HydraWebhookURL, "/") + "/production/release-wave"
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		l.Error("PostReleaseWaveStatus: build request failed: %v", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if cfg.HydraWebhookSecret != "" {
-		sig := computeHMACSHA256(body, cfg.HydraWebhookSecret)
-		req.Header.Set("X-Hub-Signature-256", fmt.Sprintf("sha256=%s", sig))
-	}
-
+	endpoint := hydraEndpoint(cfg.HydraWebhookURL, "/production/release-wave")
 	l.Info("PostReleaseWaveStatus: POST %s body=%s", endpoint, string(body))
 
-	resp, err := (&http.Client{}).Do(req)
-	if err != nil {
+	// Signed only when a secret is configured
+	status, _, err := postToHydra(endpoint, cfg.HydraWebhookSecret, cfg.HydraWebhookSecret != "", body)
+	var buildErr errHydraRequest
+	switch {
+	case errors.As(err, &buildErr):
+		l.Error("PostReleaseWaveStatus: build request failed: %v", buildErr.err)
+		return
+	case err != nil && status == 0:
 		l.Error("PostReleaseWaveStatus: request failed (event=%s): %v", event, err)
 		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		l.Error("PostReleaseWaveStatus: webhook returned status %d (event=%s)", resp.StatusCode, event)
+	case status != http.StatusOK:
+		l.Error("PostReleaseWaveStatus: webhook returned status %d (event=%s)", status, event)
 		return
 	}
 	l.Info("PostReleaseWaveStatus: reported event=%s conclusion=%s version=%s repos=%d", event, conclusion, cfg.RCVersion, len(repos))
