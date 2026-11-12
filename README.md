@@ -22,6 +22,8 @@ If `hydra_webhook_url` is set, the start and the result of the wave are also rep
 4. Creates `sync/<rc_version>-<epic>` from `production_branch` and opens a pull request into each matching epic branch, flagging merge conflicts.
 5. Sets the `sync_pr_slack_payload` output.
 
+If `hydra_webhook_url` is set, the start and the result of the sync (with the error on failure and the pull requests opened) are also reported to that webhook, together with `sync_trigger` and `triggered_by`.
+
 ## 📦 Repository selection
 - If `include_repositories` is set, exactly those repositories are used and no exclusions apply.
 - Otherwise every non-archived repository of `owner` is used, minus `exclude_repositories`. The same exclusions apply to both use cases.
