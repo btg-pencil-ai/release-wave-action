@@ -16,11 +16,13 @@ Set with the `use_case` input.
 If `hydra_webhook_url` is set, the start and the result of the wave are also reported to that webhook.
 
 ### `Main-To-Epic-Sync`
-1. Gets the list of active epic names from the webhook at `hydra_webhook_url`.
+1. Gets the epic names: from `epics` if set, otherwise the active epic names from the webhook at `hydra_webhook_url`.
 2. Finds the matching protected `epic-*` branches in each repository.
 3. Closes old open sync pull requests for those epics and deletes their branches.
 4. Creates `sync/<rc_version>-<epic>` from `production_branch` and opens a pull request into each matching epic branch, flagging merge conflicts.
 5. Sets the `sync_pr_slack_payload` output.
+
+If `hydra_webhook_url` is set, the start and the result of the sync (with the error on failure and the pull requests opened) are also reported to that webhook, together with `sync_trigger` and `triggered_by`.
 
 ## 📦 Repository selection
 - If `include_repositories` is set, exactly those repositories are used and no exclusions apply.
@@ -40,12 +42,15 @@ If `hydra_webhook_url` is set, the start and the result of the wave are also rep
 | `exclude_repositories` | Repositories to skip | | false |
 | `hydra_webhook_url` | Base URL of the status / active-epics webhook | | false¹ |
 | `hydra_webhook_secret` | Secret used to sign webhook requests (HMAC-SHA256, `X-Hub-Signature-256` header) | | false |
+| `epics` | For `Main-To-Epic-Sync`: comma-separated epic names to sync instead of the active ones | | false |
+| `sync_trigger` | For `Main-To-Epic-Sync`: what started the sync, `release` (the sync after a production release) or `manual` | `release` | false |
+| `triggered_by` | For `Main-To-Epic-Sync`: who started the sync | | false |
 | `app_id` | GitHub App ID | | false² |
 | `private_key` | GitHub App private key | | false² |
 | `installation_id` | GitHub App installation ID | | false² |
 | `github_token` | Token used when the GitHub App inputs are not set | | false² |
 
-¹ Required for `Main-To-Epic-Sync`. Optional for `Production-Release`.
+¹ Required for `Main-To-Epic-Sync` unless `epics` is set. Optional for `Production-Release`.
 ² Provide either the three GitHub App inputs or `github_token`.
 
 ## 📤 Outputs
