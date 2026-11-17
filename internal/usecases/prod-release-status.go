@@ -11,8 +11,8 @@ import (
 	"release-candidate/internal/utils"
 )
 
-// releaseWaveStatusPayload mirrors hydra-controller's ProductionReleaseWavePayload
-// (POST /production/release-wave) — keep the JSON tags in sync across the two repos.
+// releaseWaveStatusPayload mirrors the Hydra receiver's payload
+// (POST /production/release-wave): keep the JSON tags in sync with it.
 type releaseWaveStatusPayload struct {
 	RcVersion    string   `json:"rc_version"`
 	Environment  string   `json:"environment,omitempty"`
