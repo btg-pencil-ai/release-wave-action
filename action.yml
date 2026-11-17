@@ -43,6 +43,16 @@ inputs:
   hydra_webhook_secret:
     description: 'The secret for the Hydra webhook'
     required: false
+  epics:
+    description: 'Used by the Main-To-Epic-Sync use case: comma-separated epic names to sync. Empty: every active epic from the webhook'
+    required: false
+  sync_trigger:
+    description: 'Used by the Main-To-Epic-Sync use case: what started the sync, release (the sync after a production release) or manual. Reported with the sync status'
+    required: false
+    default: 'release'
+  triggered_by:
+    description: 'Used by the Main-To-Epic-Sync use case: who started the sync. Reported with the sync status'
+    required: false
   
 outputs:
   slack_payload:

@@ -48,16 +48,24 @@ func ProductionReleaseUseCase(ctx context.Context, l utils.LogInterface, client 
 
 func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo githubrepo.GithubRepo, cfg *configs.Config) {
 	l.Info("Starting Main to Epic Sync")
+	PostSyncStatus(l, cfg, "workflow_start", "", "", nil)
+
+	var prResults []SyncToEpicPRResult
 
 	repoList, err := githubRepo.ListRepositories(ctx, cfg.Owner, cfg.IncludeRepositories, cfg.ExcludeRepositories)
 	if err != nil {
-		l.Fatal("Error listing repositories: %v", err)
+		failSync(l, cfg, nil, "Error listing repositories: %v", err)
 	}
 	l.Info("repoList: %v", repoList)
-	// Fetch active epics from Hydra webhook
-	activeEpics, err := FetchHydraActiveEpics(l, cfg.HydraWebhookURL, cfg.HydraWebhookSecret)
-	if err != nil {
-		l.Fatal("Error fetching active epics: %v", err)
+	// Epics to sync: the epics input if given, otherwise the active epics from the Hydra webhook.
+	activeEpics := cfg.Epics
+	if len(activeEpics) > 0 {
+		l.Info("Using epics from the epics input: %v", activeEpics)
+	} else {
+		activeEpics, err = FetchHydraActiveEpics(l, cfg.HydraWebhookURL, cfg.HydraWebhookSecret)
+		if err != nil {
+			failSync(l, cfg, nil, "Error fetching active epics: %v", err)
+		}
 	}
 	l.Info("activeEpics: %v", activeEpics)
 
@@ -67,7 +75,7 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 		// Find epic branches in all repos
 		epicBranchResults, err := FindEpicBranchesInRepos(ctx, l, githubRepo, cfg.Owner, repoList, activeEpics)
 		if err != nil {
-			l.Fatal("Error finding epic branches: %v", err)
+			failSync(l, cfg, nil, "Error finding epic branches: %v", err)
 		}
 
 		// Log results for each epic
@@ -83,7 +91,7 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 		// Cleanup old sync branches and PRs
 		l.Info("Cleaning up old sync branches and PRs")
 		if err := CleanupOldSyncBranches(ctx, l, githubRepo, cfg.Owner, cfg.RCVersion, epicBranchResults); err != nil {
-			l.Fatal("Error cleaning up old sync branches and PRs: %v", err)
+			failSync(l, cfg, nil, "Error cleaning up old sync branches and PRs: %v", err)
 		}
 
 		// Create sync branches for each epic in repos where epic branch exists
@@ -99,11 +107,12 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 		}
 
 		if err != nil {
-			l.Fatal("Error creating sync branches: %v", err)
+			failSync(l, cfg, nil, "Error creating sync branches: %v", err)
 		}
 
 		// Create PRs from sync branches to epic branches
-		prResults, err := CreatePRsFromSyncToEpic(ctx, l, githubRepo, cfg.Owner, cfg.RCVersion, syncResults)
+		var prErr error
+		prResults, prErr = CreatePRsFromSyncToEpic(ctx, l, githubRepo, cfg.Owner, cfg.RCVersion, syncResults)
 
 		// Log PR creation results
 		prResultsByEpic := make(map[string][]map[string]interface{})
@@ -133,9 +142,10 @@ func MainToEpicSyncUseCase(ctx context.Context, l utils.LogInterface, githubRepo
 			}
 		}
 
-		if err != nil {
-			l.Fatal("Some PRs failed to create: %v", err)
+		if prErr != nil {
+			failSync(l, cfg, prResults, "Some PRs failed to create: %v", prErr)
 		}
 
 	}
+	PostSyncStatus(l, cfg, "workflow_completed", "success", "", prResults)
 }

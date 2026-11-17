@@ -58,6 +58,12 @@ func (g GithubRepo) CreateBranch(ctx context.Context, owner string, repo string,
 		} else {
 			g.l.Info("Created branch %s on %s", newBranch, repo)
 		}
+	} else if _, _, err := g.client.Git.UpdateRef(ctx, owner, repo, newBranchRef, true); err != nil {
+		// Left over from an earlier run of the same version: reset it to the current base so it
+		// reflects it. If the reset fails, keep using the existing branch.
+		g.l.Warn("Branch %s already exists on %s and could not be reset to %s, using it as is: %v", newBranch, repo, baseBranch, err)
+	} else {
+		g.l.Info("Reset existing branch %s on %s to %s", newBranch, repo, baseBranch)
 	}
 	return nil
 }
