@@ -12,8 +12,8 @@ import (
 	"release-candidate/internal/utils"
 )
 
-// syncStatusPayload mirrors hydra-controller's ProductionSyncPRsPayload (POST /production/sync-prs).
-// Keep the JSON tags in sync across the two repos.
+// syncStatusPayload mirrors the Hydra receiver's payload (POST /production/sync-prs).
+// Keep the JSON tags in sync with it.
 type syncStatusPayload struct {
 	Event       string             `json:"event"` // workflow_start | workflow_completed | workflow_failed
 	RcVersion   string             `json:"rc_version"`
